@@ -16,7 +16,11 @@ MODO_PRUEBA = True
 CORREO_ADMIN = "francoalbrecht@rivarossa.com"
 
 # Límite de seguridad para no saturar tu bandeja durante las pruebas
-LIMITE_ENVIOS_PRUEBA = 2 
+LIMITE_ENVIOS_PRUEBA = 2
+
+# Días de anticipación con los que se dispara el correo antes del vencimiento.
+# Ej: vencimiento el 19 con DIAS_ANTICIPACION_ENVIO = 2 -> el correo sale el 17.
+DIAS_ANTICIPACION_ENVIO = 2
 
 # Diccionario de respaldo (Fallback) por si la API de Redmine deniega el acceso a /users.json.
 # Si la auto-sincronización falla, podés cargar los IDs manualmente acá.
@@ -24,21 +28,6 @@ USUARIOS_FALLBACK = {
     "579": {"nombre": "Sandoval, Vanina", "correo": "vsandoval@rivarossa.com"},
     # "ID": {"nombre": "Apellido, Nombre", "correo": "email@rivarossa.com"}
 }
-
-def get_periodos_validos():
-    """Calcula el periodo actual y el anterior basándose en la fecha actual"""
-    hoy = datetime.now()
-    mes_actual = hoy.month
-    anio_actual = hoy.year
-    
-    if mes_actual == 1:
-        mes_anterior = 12
-        anio_anterior = anio_actual - 1
-    else:
-        mes_anterior = mes_actual - 1
-        anio_anterior = anio_actual
-        
-    return [f"{mes_actual:02d}/{anio_actual}", f"{mes_anterior:02d}/{anio_anterior}"]
 
 def formatear_fecha(fecha_str):
     """Traduce el formato YYYY-MM-DD a texto legible en español"""
@@ -48,6 +37,16 @@ def formatear_fecha(fecha_str):
         return f"{fecha_obj.day} de {meses[fecha_obj.month - 1]} de {fecha_obj.year}"
     except ValueError:
         return fecha_str
+
+def calcular_dias_restantes(fecha_vencimiento_str, hoy=None):
+    """Devuelve cuántos días faltan para el vencimiento, o None si la fecha no es parseable."""
+    if hoy is None:
+        hoy = datetime.now().date()
+    try:
+        fecha_venc = datetime.strptime(fecha_vencimiento_str, "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return None
+    return (fecha_venc - hoy).days
 
 def fetch_redmine_users(session, redmine_url, api_key):
     """Obtiene la lista de usuarios de Redmine para traducir el ID al Nombre real"""
@@ -111,10 +110,12 @@ def fetch_redmine_issues(session, redmine_url, api_key):
     return all_issues
 
 def process_redmine_data(issues):
-    """Filtra y agrupa las peticiones asignando la tarea y el rol exacto al ID del usuario"""
-    periodos_buscados = get_periodos_validos()
+    """Filtra y agrupa las peticiones cuyo vencimiento cae exactamente a
+    DIAS_ANTICIPACION_ENVIO días de hoy, asignando la tarea y el rol exacto al ID del usuario"""
     notificaciones = {}
-    
+    descartadas_sin_fecha = 0
+    descartadas_fuera_de_rango = 0
+
     for issue in issues:
         proyecto = issue.get("project", {}).get("name", "")
         tipo = issue.get("tracker", {}).get("name", "")
@@ -144,26 +145,36 @@ def process_redmine_data(issues):
                         "rol": nombre.capitalize()
                     })
             
-            if periodo in periodos_buscados:
-                empresa = proyecto.split(" / ")[0].strip()
-                
-                # Asignamos la tarea formateada a cada ID involucrado
-                for involucrado in roles_involucrados:
-                    persona_id = involucrado["id"]
-                    rol_asignado = involucrado["rol"]
-                    
-                    # Agregamos el rol exacto a la línea que verá el usuario
-                    linea_tarea = f"<strong>{empresa}</strong> - {tipo} - {asunto} <em>(Rol: {rol_asignado})</em>"
-                    
-                    if persona_id not in notificaciones:
-                        notificaciones[persona_id] = {}
-                        
-                    clave_grupo = (periodo, fecha_vencimiento)
-                    if clave_grupo not in notificaciones[persona_id]:
-                        notificaciones[persona_id][clave_grupo] = []
-                        
-                    notificaciones[persona_id][clave_grupo].append(linea_tarea)
-                    
+            # --- Filtro por fecha de vencimiento (reemplaza al filtro por período) ---
+            dias_restantes = calcular_dias_restantes(fecha_vencimiento)
+            if dias_restantes is None:
+                descartadas_sin_fecha += 1
+                continue
+            if dias_restantes != DIAS_ANTICIPACION_ENVIO:
+                descartadas_fuera_de_rango += 1
+                continue
+
+            empresa = proyecto.split(" / ")[0].strip()
+
+            # Asignamos la tarea formateada a cada ID involucrado
+            for involucrado in roles_involucrados:
+                persona_id = involucrado["id"]
+                rol_asignado = involucrado["rol"]
+
+                # Agregamos el rol exacto a la línea que verá el usuario
+                linea_tarea = f"<strong>{empresa}</strong> - {tipo} - {asunto} <em>(Rol: {rol_asignado})</em>"
+
+                if persona_id not in notificaciones:
+                    notificaciones[persona_id] = {}
+
+                clave_grupo = (periodo, fecha_vencimiento)
+                if clave_grupo not in notificaciones[persona_id]:
+                    notificaciones[persona_id][clave_grupo] = []
+
+                notificaciones[persona_id][clave_grupo].append(linea_tarea)
+
+    print(f"Filtrado por vencimiento: {descartadas_sin_fecha} sin fecha válida, "
+          f"{descartadas_fuera_de_rango} fuera de la ventana de {DIAS_ANTICIPACION_ENVIO} días.")
     return notificaciones
 
 def armar_html_persona(nombre_real, datos_agrupados):
