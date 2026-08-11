@@ -15,9 +15,6 @@ load_dotenv()
 MODO_PRUEBA = True
 CORREO_ADMIN = "francoalbrecht@rivarossa.com"
 
-# Límite de seguridad para no saturar tu bandeja durante las pruebas
-LIMITE_ENVIOS_PRUEBA = 2
-
 # Motor de reglas de notificación: cada tracker (tipo de petición) define con
 # cuántos días de anticipación se dispara su correo de aviso.
 # Ej: "Tributaria - II BB": 2 -> vencimiento el 19, el correo sale el 17.
@@ -215,12 +212,7 @@ def enviar_correos_individuales(notificaciones, users_map, smtp_server, smtp_por
             server.login(smtp_user, smtp_pass)
             
             for persona_id, datos in notificaciones.items():
-                
-                # Freno de seguridad para pruebas
-                if MODO_PRUEBA and correos_enviados >= LIMITE_ENVIOS_PRUEBA:
-                    print(f"\n[!] Límite de prueba alcanzado ({LIMITE_ENVIOS_PRUEBA} correos). Envío detenido.")
-                    break
-                
+
                 # Traducir el ID (ej: "579") al nombre y correo real
                 if users_map and persona_id in users_map:
                     nombre_real = users_map[persona_id]["nombre"]
@@ -255,8 +247,12 @@ def enviar_correos_individuales(notificaciones, users_map, smtp_server, smtp_por
                 </html>
                 """
                 
+                asunto = f'Reporte de Vencimientos: {nombre_real}'
+                if MODO_PRUEBA:
+                    asunto = f'[PRUEBA] - Original para: {nombre_real} - {asunto}'
+
                 msg = EmailMessage()
-                msg['Subject'] = f'Reporte de Vencimientos: {nombre_real}'
+                msg['Subject'] = asunto
                 msg['From'] = from_email
                 msg['To'] = correo_destino
                 msg.set_content("Este correo requiere un cliente que soporte HTML.")
