@@ -18,9 +18,14 @@ CORREO_ADMIN = "francoalbrecht@rivarossa.com"
 # Límite de seguridad para no saturar tu bandeja durante las pruebas
 LIMITE_ENVIOS_PRUEBA = 2
 
-# Días de anticipación con los que se dispara el correo antes del vencimiento.
-# Ej: vencimiento el 19 con DIAS_ANTICIPACION_ENVIO = 2 -> el correo sale el 17.
-DIAS_ANTICIPACION_ENVIO = 2
+# Motor de reglas de notificación: cada tracker (tipo de petición) define con
+# cuántos días de anticipación se dispara su correo de aviso.
+# Ej: "Tributaria - II BB": 2 -> vencimiento el 19, el correo sale el 17.
+REGLAS_NOTIFICACION = {
+    "Tributaria - II BB": 2,
+    # "Tributaria - IVA": 3,
+    # "Laboral": 5,
+}
 
 # Diccionario de respaldo (Fallback) por si la API de Redmine deniega el acceso a /users.json.
 # Si la auto-sincronización falla, podés cargar los IDs manualmente acá.
@@ -110,8 +115,9 @@ def fetch_redmine_issues(session, redmine_url, api_key):
     return all_issues
 
 def process_redmine_data(issues):
-    """Filtra y agrupa las peticiones cuyo vencimiento cae exactamente a
-    DIAS_ANTICIPACION_ENVIO días de hoy, asignando la tarea y el rol exacto al ID del usuario"""
+    """Filtra y agrupa las peticiones cuyo vencimiento cae exactamente a los días de
+    anticipación definidos en REGLAS_NOTIFICACION para su tracker, asignando la tarea
+    y el rol exacto al ID del usuario"""
     notificaciones = {}
     descartadas_sin_fecha = 0
     descartadas_fuera_de_rango = 0
@@ -121,8 +127,9 @@ def process_redmine_data(issues):
         tipo = issue.get("tracker", {}).get("name", "")
         estado = issue.get("status", {}).get("name", "")
         asunto = issue.get("subject", "")
-        
-        if "IMPUESTOS" in proyecto.upper() and tipo == "Tributaria - II BB" and estado == "Pendiente":
+
+        dias_anticipacion = REGLAS_NOTIFICACION.get(tipo)
+        if "IMPUESTOS" in proyecto.upper() and dias_anticipacion is not None and estado == "Pendiente":
             campos = issue.get("custom_fields", [])
             
             fecha_vencimiento = "Sin Vencimiento"
@@ -150,7 +157,7 @@ def process_redmine_data(issues):
             if dias_restantes is None:
                 descartadas_sin_fecha += 1
                 continue
-            if dias_restantes != DIAS_ANTICIPACION_ENVIO:
+            if dias_restantes != dias_anticipacion:
                 descartadas_fuera_de_rango += 1
                 continue
 
@@ -174,7 +181,7 @@ def process_redmine_data(issues):
                 notificaciones[persona_id][clave_grupo].append(linea_tarea)
 
     print(f"Filtrado por vencimiento: {descartadas_sin_fecha} sin fecha válida, "
-          f"{descartadas_fuera_de_rango} fuera de la ventana de {DIAS_ANTICIPACION_ENVIO} días.")
+          f"{descartadas_fuera_de_rango} fuera de la ventana definida en REGLAS_NOTIFICACION.")
     return notificaciones
 
 def armar_html_persona(nombre_real, datos_agrupados):
