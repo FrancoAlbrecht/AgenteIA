@@ -1,12 +1,28 @@
 import os
 import requests
 import smtplib
+import base64
 from datetime import datetime, timedelta
 from email.message import EmailMessage
 from dotenv import load_dotenv
 from feriados import FERIADOS
 
 load_dotenv()
+
+# Cargar logo en base64
+def cargar_logo_base64():
+    """Carga la imagen del logo y la convierte a base64 para incrustarla en el HTML"""
+    ruta_logo = os.path.join(os.path.dirname(__file__), "images", "LogoBlanco.png")
+    try:
+        with open(ruta_logo, "rb") as f:
+            imagen_bytes = f.read()
+            logo_b64 = base64.b64encode(imagen_bytes).decode('utf-8')
+            return f"data:image/png;base64,{logo_b64}"
+    except Exception as e:
+        print(f"[WARN] No se pudo cargar el logo: {e}")
+        return None
+
+LOGO_BASE64 = cargar_logo_base64()
 
 # ==========================================
 # CONFIGURACIÓN GENERAL DEL AGENTE
@@ -85,7 +101,7 @@ def fetch_redmine_users(session, redmine_url, api_key):
         while True:
             response = session.get(url, headers=headers, params={"limit": limit, "offset": offset}, timeout=10)
             if response.status_code == 403:
-                print("⚠️  Sin permisos para leer /users.json. Se utilizará USUARIOS_FALLBACK.")
+                print("[WARN] Sin permisos para leer /users.json. Se utilizara USUARIOS_FALLBACK.")
                 return USUARIOS_FALLBACK
             
             response.raise_for_status()
@@ -102,10 +118,10 @@ def fetch_redmine_users(session, redmine_url, api_key):
                 }
             offset += limit
             
-        print(f"✓ Directorio sincronizado: {len(users_map)} usuarios encontrados.")
+        print(f"[OK] Directorio sincronizado: {len(users_map)} usuarios encontrados.")
         return users_map
     except Exception as e:
-        print(f"⚠️  Error al sincronizar usuarios ({e}). Se utilizará USUARIOS_FALLBACK.")
+        print(f"[WARN] Error al sincronizar usuarios ({e}). Se utilizara USUARIOS_FALLBACK.")
         return USUARIOS_FALLBACK
 
 def fetch_redmine_issues(session, redmine_url, api_key):
@@ -127,10 +143,10 @@ def fetch_redmine_issues(session, redmine_url, api_key):
             all_issues.extend(data)
             offset += limit
         except Exception as e:
-            print(f"✗ Error al descargar peticiones: {e}")
+            print(f"[ERROR] Error al descargar peticiones: {e}")
             break
             
-    print(f"✓ Peticiones descargadas: {len(all_issues)} en total.")
+    print(f"[OK] Peticiones descargadas: {len(all_issues)} en total.")
     return all_issues
 
 def process_redmine_data(issues, hoy=None):
@@ -224,7 +240,7 @@ def process_redmine_data(issues, hoy=None):
           f"{descartadas_fuera_de_rango} fuera de la ventana definida en REGLAS_NOTIFICACION.")
     return notificaciones
 
-def armar_html_persona(nombre_real, datos_por_tipo, redmine_url):
+def armar_html_persona(nombre_real, datos_por_tipo, redmine_url, logo_base64=None):
     """Genera el código HTML con estética mejorada, utilizando el nombre real de la persona.
     datos_por_tipo: { tipo_peticion: { (periodo, fecha_vencimiento): [tareas_dict] } }
     Se muestra un bloque por tipo de petición (II BB, DREI, CM, IVA, etc.) y, dentro
@@ -315,7 +331,9 @@ def enviar_correos_individuales(notificaciones, users_map, smtp_server, smtp_por
                 # en vez de al destinatario real (ver nota en la configuración general).
                 correo_destino = CORREO_ADMIN if REDIRIGIR_A_ADMIN else correo_real
 
-                cuerpo_html = armar_html_persona(nombre_real, datos, redmine_url)
+                cuerpo_html = armar_html_persona(nombre_real, datos, redmine_url, LOGO_BASE64)
+
+                logo_html = f'<img src="{LOGO_BASE64}" alt="Estudio Rivarossa" style="max-width: 280px; height: auto; margin-bottom: 15px;">' if LOGO_BASE64 else ""
 
                 plantilla_html = f"""<!DOCTYPE html>
 <html lang="es">
@@ -325,7 +343,9 @@ def enviar_correos_individuales(notificaciones, users_map, smtp_server, smtp_por
     <style>
         body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; background-color: #f5f5f5; margin: 0; padding: 0; }}
         .container {{ max-width: 900px; margin: 20px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12); }}
-        .header {{ background: linear-gradient(135deg, #A75296 0%, #8B3D7C 100%); color: white; padding: 40px 20px; text-align: center; }}
+        .header {{ background: linear-gradient(135deg, #A75296 0%, #8B3D7C 100%); color: white; padding: 35px 20px; text-align: center; }}
+        .logo-container {{ display: flex; justify-content: center; margin-bottom: 20px; }}
+        .logo-container img {{ filter: brightness(1.15) drop-shadow(0 2px 4px rgba(0,0,0,0.1)); }}
         .header h1 {{ margin: 0; font-size: 28px; font-weight: 300; letter-spacing: 0.5px; }}
         .header p {{ margin: 10px 0 0 0; font-size: 14px; opacity: 0.95; font-weight: 300; }}
         .content {{ padding: 35px 32px; }}
@@ -347,6 +367,9 @@ def enviar_correos_individuales(notificaciones, users_map, smtp_server, smtp_por
 <body>
     <div class="container">
         <div class="header">
+            <div class="logo-container">
+                {logo_html}
+            </div>
             <h1>Peticiones Pendientes</h1>
             <p>{nombre_real}</p>
         </div>
@@ -373,10 +396,10 @@ def enviar_correos_individuales(notificaciones, users_map, smtp_server, smtp_por
                 try:
                     server.send_message(msg)
                     etiqueta = "[REDIRIGIDO A ADMIN]" if REDIRIGIR_A_ADMIN else "[PRODUCCIÓN]"
-                    print(f"✓ {etiqueta} Correo procesado para: {nombre_real} -> Enviado a: {correo_destino}")
+                    print(f"[OK] {etiqueta} Correo procesado para: {nombre_real} -> Enviado a: {correo_destino}")
                     correos_enviados += 1
                 except Exception as e:
-                    print(f"✗ Error al enviar correo a {nombre_real}: {e}")
+                    print(f"[ERROR] Error al enviar correo a {nombre_real}: {e}")
                     
     except Exception as e:
         print(f"Error crítico en el servidor SMTP: {e}")
