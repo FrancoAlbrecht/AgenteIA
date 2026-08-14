@@ -249,9 +249,8 @@ def armar_html_persona(nombre_real, datos_por_tipo, redmine_url, logo_base64=Non
 
     html = f"""
     <p style="font-size: 15px; line-height: 1.6; margin: 0 0 20px 0;">
-        <strong>Estimado/a {nombre_pila},</strong><br>
-        a continuación encontrás un listado de peticiones con vencimiento próximo que requieren tu atención.
-        Se muestran todas aquellas que vencen en los próximos días hábiles según el tipo de trámite.
+        <strong>Hola {nombre_pila},</strong><br>
+        Te dejamos el listado de vencimientos próximos que requieren tu atención, agrupados por tipo de petición.
     </p>
     """
 
@@ -340,14 +339,14 @@ def enviar_correos_individuales(notificaciones, users_map, smtp_server, smtp_por
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light">
+    <meta name="supported-color-schemes" content="light">
     <style>
         body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; background-color: #f5f5f5; margin: 0; padding: 0; }}
         .container {{ max-width: 900px; margin: 20px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12); }}
-        .header {{ background: linear-gradient(135deg, #A75296 0%, #8B3D7C 100%); color: white; padding: 35px 20px; text-align: center; }}
-        .logo-container {{ display: flex; justify-content: center; margin-bottom: 20px; }}
+        .header {{ background-color: #A75296; background: linear-gradient(135deg, #A75296 0%, #8B3D7C 100%); color: #ffffff !important; padding: 35px 20px; text-align: center; }}
+        .logo-container {{ display: flex; justify-content: center; }}
         .logo-container img {{ filter: brightness(1.15) drop-shadow(0 2px 4px rgba(0,0,0,0.1)); }}
-        .header h1 {{ margin: 0; font-size: 28px; font-weight: 300; letter-spacing: 0.5px; }}
-        .header p {{ margin: 10px 0 0 0; font-size: 14px; opacity: 0.95; font-weight: 300; }}
         .content {{ padding: 35px 32px; }}
         .content p {{ font-size: 14px; line-height: 1.7; margin: 0 0 18px 0; }}
         .content strong {{ color: #A75296; }}
@@ -370,15 +369,12 @@ def enviar_correos_individuales(notificaciones, users_map, smtp_server, smtp_por
             <div class="logo-container">
                 {logo_html}
             </div>
-            <h1>Peticiones Pendientes</h1>
-            <p>{nombre_real}</p>
         </div>
         <div class="content">
             {cuerpo_html}
         </div>
         <div class="footer">
-            <p>Este reporte fue generado automáticamente por el Sistema Operativo.</p>
-            <p>&copy; Estudio Rivarossa — Asesoramiento Fiscal y Contable</p>
+            <p>Este reporte fue generado de manera automática. &copy; Estudio Rivarossa</p>
         </div>
     </div>
 </body>
