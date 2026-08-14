@@ -2,7 +2,7 @@ name: Reporte de Vencimientos Tributarios
 
 on:
   schedule:
-    - cron: '20 10 * * *'  # 07:20 ART (UTC-3, Argentina no tiene horario de verano), todos los días
+    - cron: '0 10 * * *'  # 07:00 ART (UTC-3, Argentina no tiene horario de verano), todos los días
   workflow_dispatch:        # permite disparo manual desde la pestaña Actions, para pruebas
 
 permissions:
