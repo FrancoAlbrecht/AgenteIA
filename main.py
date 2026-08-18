@@ -27,12 +27,18 @@ LOGO_BASE64 = cargar_logo_base64()
 # ==========================================
 # CONFIGURACIÓN GENERAL DEL AGENTE
 # ==========================================
-# Mientras la herramienta se termina de validar, TODOS los correos se redirigen
-# a CORREO_ADMIN (con los nombres y datos reales de cada destinatario en el cuerpo).
-# Cuando se dé por definitivo, cambiar REDIRIGIR_A_ADMIN a False para que cada
-# persona reciba su propio correo.
-REDIRIGIR_A_ADMIN = True
+# Modo Prueba: si está en True, TODOS los correos se redirigen a CORREO_ADMIN
+# (con los nombres y datos reales de cada destinatario en el cuerpo). En
+# producción debe estar en False para que cada persona reciba su propio correo.
+REDIRIGIR_A_ADMIN = False
 CORREO_ADMIN = "francoalbrecht@rivarossa.com"
+
+# Excepciones puntuales: personas cuyo correo, aun en producción, debe seguir
+# llegando a CORREO_ADMIN en lugar de a su casilla real. Se matchea contra el
+# nombre real ("Apellido, Nombre") de forma flexible (sin importar mayúsculas).
+EXCEPCIONES_DESTINO = {
+    "previotto, gisela": CORREO_ADMIN,
+}
 
 # Motor de reglas de notificación: cada tracker (tipo de petición) define con
 # cuántos días HÁBILES de anticipación se dispara su correo de aviso. Se consideran
@@ -328,7 +334,11 @@ def enviar_correos_individuales(notificaciones, users_map, smtp_server, smtp_por
 
                 # Mientras REDIRIGIR_A_ADMIN esté activo, todo correo se manda a CORREO_ADMIN
                 # en vez de al destinatario real (ver nota en la configuración general).
-                correo_destino = CORREO_ADMIN if REDIRIGIR_A_ADMIN else correo_real
+                # EXCEPCIONES_DESTINO tiene prioridad y aplica incluso en producción.
+                if REDIRIGIR_A_ADMIN:
+                    correo_destino = CORREO_ADMIN
+                else:
+                    correo_destino = EXCEPCIONES_DESTINO.get(nombre_real.strip().lower(), correo_real)
 
                 cuerpo_html = armar_html_persona(nombre_real, datos, redmine_url, LOGO_BASE64)
 
@@ -391,7 +401,12 @@ def enviar_correos_individuales(notificaciones, users_map, smtp_server, smtp_por
                 
                 try:
                     server.send_message(msg)
-                    etiqueta = "[REDIRIGIDO A ADMIN]" if REDIRIGIR_A_ADMIN else "[PRODUCCIÓN]"
+                    if REDIRIGIR_A_ADMIN:
+                        etiqueta = "[REDIRIGIDO A ADMIN]"
+                    elif nombre_real.strip().lower() in EXCEPCIONES_DESTINO:
+                        etiqueta = "[EXCEPCIÓN -> ADMIN]"
+                    else:
+                        etiqueta = "[PRODUCCIÓN]"
                     print(f"[OK] {etiqueta} Correo procesado para: {nombre_real} -> Enviado a: {correo_destino}")
                     correos_enviados += 1
                 except Exception as e:
