@@ -390,7 +390,7 @@ def enviar_correos_individuales(notificaciones, users_map, smtp_server, smtp_por
 </body>
 </html>"""
                 
-                asunto = f'Reporte de Vencimientos: {nombre_real}'
+                asunto = f'Reporte de Vencimientos: {nombre_real.upper()}'
 
                 msg = EmailMessage()
                 msg['Subject'] = asunto
