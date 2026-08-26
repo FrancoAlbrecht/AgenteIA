@@ -1,0 +1,38 @@
+name: Reporte Mensual de Auditoría
+
+on:
+  schedule:
+    - cron: '0 10 * * *'  # 07:00 ART, todos los días; el script decide internamente
+                           # si hoy corresponde al día de envío mensual (día 20, o el
+                           # día hábil siguiente si cae en fin de semana o feriado)
+  workflow_dispatch:        # permite disparo manual desde la pestaña Actions, para pruebas
+
+permissions:
+  contents: read
+
+jobs:
+  enviar-reporte:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Ejecutar agente de auditoría
+        env:
+          REDMINE_URL: ${{ secrets.REDMINE_URL }}
+          REDMINE_API_KEY: ${{ secrets.REDMINE_API_KEY }}
+          SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SMTP_FROM_EMAIL: ${{ secrets.SMTP_FROM_EMAIL }}
+        run: python main_auditoria.py
