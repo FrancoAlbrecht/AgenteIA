@@ -62,6 +62,13 @@ USUARIOS_FALLBACK = {
     # "ID": {"nombre": "Apellido, Nombre", "correo": "email@rivarossa.com"}
 }
 
+# Personas que no deben recibir este reporte aunque Redmine los tenga asignados
+# en algún campo de rol (ej. bajas de personal). No modifica nada en Redmine,
+# sólo las excluye de este correo.
+IDS_EXCLUIDOS = {
+    "792",  # Caravario, Darién - ya no es empleado (2026-09)
+}
+
 def formatear_fecha(fecha_str):
     """Traduce el formato YYYY-MM-DD a texto legible en español"""
     try:
@@ -186,7 +193,8 @@ def process_redmine_data(issues, hoy=None):
             
             for c in campos:
                 nombre = c.get("name", "").strip().upper()
-                valor = str(c.get("value", "")).strip()
+                valor_raw = c.get("value")
+                valor = str(valor_raw).strip() if valor_raw not in (None, "") else ""
 
                 # Match exacto: algunos trackers (ej. IVA) tienen además un campo
                 # "Vencimiento Pago" distinto, que no debe confundirse con el
@@ -195,10 +203,10 @@ def process_redmine_data(issues, hoy=None):
                     fecha_vencimiento = valor
                 elif ("PERÍODO" in nombre or "PERIODO" in nombre) and valor:
                     periodo = valor
-                elif nombre in ["AUXILIAR", "LIQUIDADOR", "RESPONSABLE"] and valor:
+                elif nombre in ["AUXILIAR", "LIQUIDADOR", "RESPONSABLE"] and valor and valor not in IDS_EXCLUIDOS:
                     # Guardamos el ID del usuario y el rol exacto que cumple
                     roles_involucrados.append({
-                        "id": valor, 
+                        "id": valor,
                         "rol": nombre.capitalize()
                     })
             

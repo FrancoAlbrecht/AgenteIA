@@ -67,6 +67,13 @@ USUARIOS_FALLBACK_AUDITORIA = {
     # "ID": {"nombre": "Apellido, Nombre", "correo": "email@rivarossa.com"}
 }
 
+# Personas que no deben recibir este reporte aunque Redmine los tenga asignados
+# en algún campo de rol (ej. bajas de personal). No modifica nada en Redmine,
+# sólo las excluye de este correo.
+IDS_EXCLUIDOS_AUDITORIA = {
+    "792",  # Caravario, Darién - ya no es empleado (2026-09)
+}
+
 def _normalizar_texto(texto):
     """Quita tildes/diacríticos para poder matchear 'AUDITORÍA' y 'AUDITORIA' por igual."""
     return ''.join(c for c in unicodedata.normalize('NFKD', texto) if not unicodedata.combining(c))
@@ -170,6 +177,8 @@ def process_redmine_auditoria(issues, hoy=None):
     en estado Pendiente) cuya Fecha de cierre OT cae dentro de la ventana mensual
     actual (hoy hasta el próximo día de envío del mes siguiente, inclusive), y
     arma un único registro por persona por petición aunque ocupe varios roles.
+    Las peticiones con Fecha de cierre OT anterior a hoy quedan fuera: ya
+    tuvieron su oportunidad de aparecer en un reporte anterior.
     Devuelve: { persona_id: { tipo_peticion: { fecha_cierre_ot: [tareas] } } }"""
     if hoy is None:
         hoy = datetime.now().date()
@@ -179,6 +188,7 @@ def process_redmine_auditoria(issues, hoy=None):
 
     notificaciones = {}
     descartadas_sin_fecha = 0
+    descartadas_vencidas = 0
     descartadas_fuera_de_rango = 0
 
     for issue in issues:
@@ -198,20 +208,26 @@ def process_redmine_auditoria(issues, hoy=None):
 
             for c in campos:
                 nombre = c.get("name", "").strip().upper()
-                valor = str(c.get("value", "")).strip()
+                valor_raw = c.get("value")
+                valor = str(valor_raw).strip() if valor_raw not in (None, "") else ""
 
                 if nombre == CAMPO_FECHA_CIERRE and valor:
                     fecha_cierre_ot = valor
-                elif nombre in ROLES_AUDITORIA and valor:
+                elif nombre in ROLES_AUDITORIA and valor and valor not in IDS_EXCLUIDOS_AUDITORIA:
                     roles_por_persona.setdefault(valor, []).append(ROLES_AUDITORIA[nombre])
 
-            # --- Filtro por Fecha de cierre OT: sólo entra en el reporte del mes en que
-            # cae, o antes si ya está vencida (sigue pendiente); si la fecha cae después
-            # del próximo corte, se difiere al reporte de un mes más adelante. ---
+            # --- Filtro por Fecha de cierre OT: sólo entra en el reporte si cae de hoy
+            # en adelante y hasta el próximo corte mensual (inclusive). Lo que ya venció
+            # queda afuera: se asume que ya apareció en el reporte del mes que le
+            # correspondía, y no se repite en los siguientes. ---
             try:
                 fecha_cierre_dt = datetime.strptime(fecha_cierre_ot, "%Y-%m-%d").date()
             except (ValueError, TypeError):
                 descartadas_sin_fecha += 1
+                continue
+
+            if fecha_cierre_dt < hoy:
+                descartadas_vencidas += 1
                 continue
 
             if fecha_cierre_dt > proximo_corte:
@@ -242,6 +258,7 @@ def process_redmine_auditoria(issues, hoy=None):
                 notificaciones[persona_id][tipo][fecha_cierre_ot].append(tarea_datos)
 
     print(f"Filtrado por Fecha de cierre OT: {descartadas_sin_fecha} sin fecha válida, "
+          f"{descartadas_vencidas} ya vencidas (antes de hoy, {hoy}), "
           f"{descartadas_fuera_de_rango} fuera de la ventana mensual (próximo corte: {proximo_corte}).")
     return notificaciones
 
