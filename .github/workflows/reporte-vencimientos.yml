@@ -2,7 +2,12 @@ name: Reporte de Vencimientos Tributarios
 
 on:
   schedule:
-    - cron: '0 10 * * *'  # 07:00 ART (UTC-3, Argentina no tiene horario de verano), todos los días
+    # GitHub retrasa los triggers "schedule" bajo carga (confirmado: en este repo viene
+    # arrancando 3 a 7 horas tarde todos los días, por eso el correo llegaba cerca del
+    # mediodía en vez de a la mañana). Se adelanta el horario y se corre en un minuto
+    # que no sea en punto (evita la congestión de las horas exactas) para compensar
+    # ese atraso y que, con la demora típica, el envío real siga cayendo a la mañana.
+    - cron: '24 6 * * *'  # dispara a las 03:24 ART; con 3-7hs de demora tipica llega ~06:30-10:30 ART
   workflow_dispatch:        # permite disparo manual desde la pestaña Actions, para pruebas
 
 permissions:
