@@ -422,6 +422,7 @@ def enviar_correos_individuales(notificaciones, users_map, smtp_server, smtp_por
                     
     except Exception as e:
         print(f"Error crítico en el servidor SMTP: {e}")
+        raise
 
 if __name__ == "__main__":
     url = os.getenv("REDMINE_URL")
