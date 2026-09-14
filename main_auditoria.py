@@ -422,8 +422,49 @@ def enviar_correos_auditoria(notificaciones, users_map, smtp_server, smtp_port, 
                 except Exception as e:
                     print(f"[ERROR] Error al enviar correo a {nombre_real}: {e}")
 
+            # Si había gente para notificar y ni un solo correo salió, algo está
+            # mal (ej. todos los destinatarios rebotan) aunque el login SMTP haya
+            # funcionado. Lo tratamos como fallo crítico para que el job no quede
+            # en verde con cero correos enviados.
+            if notificaciones and correos_enviados == 0:
+                raise RuntimeError(
+                    "Había notificaciones pendientes pero no se pudo enviar ningún correo "
+                    "(ver errores individuales arriba)."
+                )
+
     except Exception as e:
         print(f"Error crítico en el servidor SMTP: {e}")
+        raise
+
+    return correos_enviados
+
+def enviar_resumen_ejecucion(estado, detalle_lineas, smtp_server, smtp_port, smtp_user, smtp_pass, from_email):
+    """Envía un correo de estado a francoalbrecht@rivarossa.com informando si la
+    ejecución del reporte mensual de auditoría fue exitosa o no. Se intenta
+    siempre, haya terminado bien o mal el resto del script, para que un fallo
+    silencioso (ej. credenciales SMTP vencidas) se note en vez de descubrirse
+    por accidente, igual que en main_impuestos.py."""
+    destino = "francoalbrecht@rivarossa.com"
+    asunto = f"[Agente Auditoría] Ejecución {estado} - {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+    cuerpo = "\n".join(detalle_lineas)
+
+    msg = EmailMessage()
+    msg['Subject'] = asunto
+    msg['From'] = from_email
+    msg['To'] = destino
+    msg.set_content(cuerpo)
+
+    try:
+        with smtplib.SMTP(smtp_server, int(smtp_port)) as server:
+            server.starttls()
+            server.login(smtp_user, smtp_pass)
+            server.send_message(msg)
+        print(f"[OK] Resumen de ejecución enviado a {destino}")
+    except Exception as e:
+        # No relanzamos: si esto falla (ej. porque justo el SMTP está roto,
+        # el mismo problema que estamos reportando) no queremos tapar el
+        # error original ni romper el resto del cierre del script.
+        print(f"[ERROR] No se pudo enviar el resumen de ejecución a {destino}: {e}")
 
 if __name__ == "__main__":
     url = os.getenv("REDMINE_URL")
@@ -444,23 +485,57 @@ if __name__ == "__main__":
         print(f"[INFO] Hoy ({hoy}) no es el día de envío del reporte mensual de auditoría "
               f"(corresponde el {fecha_envio_mes_actual}). No se envían correos.")
     else:
-        with requests.Session() as session:
-            mapa_usuarios = fetch_redmine_users(session, url, redmine_key)
-            peticiones = fetch_redmine_issues(session, url, redmine_key)
+        # Sólo en el día de envío (o al forzarlo) corremos con la misma red de
+        # seguridad que main_impuestos.py: si algo falla, igual se manda un
+        # resumen a francoalbrecht@rivarossa.com y el job queda en rojo.
+        estado = "EXITOSA"
+        error_texto = None
+        total_peticiones = 0
+        total_notificaciones = 0
+        correos_enviados = 0
 
-        if peticiones:
-            notificaciones_por_persona = process_redmine_auditoria(peticiones, hoy)
+        try:
+            with requests.Session() as session:
+                mapa_usuarios = fetch_redmine_users(session, url, redmine_key)
+                peticiones = fetch_redmine_issues(session, url, redmine_key)
 
-            if notificaciones_por_persona:
-                enviar_correos_auditoria(
-                    notificaciones_por_persona,
-                    mapa_usuarios,
-                    smtp_server,
-                    smtp_port,
-                    smtp_user,
-                    smtp_pass,
-                    from_email,
-                    url
-                )
+            total_peticiones = len(peticiones)
+
+            if peticiones:
+                notificaciones_por_persona = process_redmine_auditoria(peticiones, hoy)
+                total_notificaciones = len(notificaciones_por_persona)
+
+                if notificaciones_por_persona:
+                    correos_enviados = enviar_correos_auditoria(
+                        notificaciones_por_persona,
+                        mapa_usuarios,
+                        smtp_server,
+                        smtp_port,
+                        smtp_user,
+                        smtp_pass,
+                        from_email,
+                        url
+                    )
+                else:
+                    print("El sistema no detectó peticiones de auditoría pendientes con cierre dentro de la ventana mensual.")
             else:
-                print("El sistema no detectó peticiones de auditoría pendientes con cierre dentro de la ventana mensual.")
+                print("No se descargaron peticiones desde Redmine.")
+
+        except Exception as e:
+            estado = "CON ERROR"
+            error_texto = str(e)
+            print(f"[ERROR] Ejecución interrumpida: {e}")
+
+        finally:
+            detalle = [
+                f"Peticiones descargadas de Redmine: {total_peticiones}",
+                f"Personas con peticiones de auditoría a notificar: {total_notificaciones}",
+                f"Correos enviados con éxito: {correos_enviados}",
+            ]
+            if error_texto:
+                detalle += ["", f"Error: {error_texto}"]
+
+            enviar_resumen_ejecucion(estado, detalle, smtp_server, smtp_port, smtp_user, smtp_pass, from_email)
+
+        if estado == "CON ERROR":
+            raise SystemExit(1)
