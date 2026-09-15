@@ -10,6 +10,31 @@ from feriados import FERIADOS
 
 load_dotenv()
 
+def obtener_access_token_oauth(client_id, client_secret, refresh_token):
+    """Cambia el refresh token de Google por un access token de corta duración para
+    autenticar el SMTP vía OAuth2 (XOAUTH2), en vez de usuario+contraseña de
+    aplicación (mismo cambio aplicado a main_impuestos.py tras el incidente del
+    15/09, donde Google bloqueaba el login con contraseña desde las IPs
+    rotativas de GitHub Actions por considerarlo sospechoso)."""
+    resp = requests.post(
+        "https://oauth2.googleapis.com/token",
+        data={
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "refresh_token": refresh_token,
+            "grant_type": "refresh_token",
+        },
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()["access_token"]
+
+def autenticar_smtp_oauth(server, smtp_user, access_token):
+    """Autentica una conexión SMTP ya abierta (después de starttls) usando el
+    mecanismo XOAUTH2, con el access_token obtenido de obtener_access_token_oauth."""
+    cadena_auth = f"user={smtp_user}\x01auth=Bearer {access_token}\x01\x01"
+    server.auth("XOAUTH2", lambda challenge=None: cadena_auth)
+
 # Cargar logo en base64
 def cargar_logo_base64():
     """Carga la imagen del logo y la convierte a base64 para incrustarla en el HTML"""
@@ -327,14 +352,14 @@ def armar_html_persona(nombre_real, datos_por_tipo, redmine_url):
 
     return html
 
-def enviar_correos_auditoria(notificaciones, users_map, smtp_server, smtp_port, smtp_user, smtp_pass, from_email, redmine_url):
+def enviar_correos_auditoria(notificaciones, users_map, smtp_server, smtp_port, smtp_user, access_token, from_email, redmine_url):
     print("\nIniciando motor de envío de correos de auditoría...")
     correos_enviados = 0
 
     try:
         with smtplib.SMTP(smtp_server, int(smtp_port)) as server:
             server.starttls()
-            server.login(smtp_user, smtp_pass)
+            autenticar_smtp_oauth(server, smtp_user, access_token)
 
             for persona_id, datos in notificaciones.items():
 
@@ -438,7 +463,7 @@ def enviar_correos_auditoria(notificaciones, users_map, smtp_server, smtp_port, 
 
     return correos_enviados
 
-def enviar_resumen_ejecucion(estado, detalle_lineas, smtp_server, smtp_port, smtp_user, smtp_pass, from_email):
+def enviar_resumen_ejecucion(estado, detalle_lineas, smtp_server, smtp_port, smtp_user, access_token, from_email):
     """Envía un correo de estado a francoalbrecht@rivarossa.com informando si la
     ejecución del reporte mensual de auditoría fue exitosa o no. Se intenta
     siempre, haya terminado bien o mal el resto del script, para que un fallo
@@ -457,7 +482,7 @@ def enviar_resumen_ejecucion(estado, detalle_lineas, smtp_server, smtp_port, smt
     try:
         with smtplib.SMTP(smtp_server, int(smtp_port)) as server:
             server.starttls()
-            server.login(smtp_user, smtp_pass)
+            autenticar_smtp_oauth(server, smtp_user, access_token)
             server.send_message(msg)
         print(f"[OK] Resumen de ejecución enviado a {destino}")
     except Exception as e:
@@ -473,7 +498,9 @@ if __name__ == "__main__":
     smtp_server = os.getenv("SMTP_SERVER")
     smtp_port = os.getenv("SMTP_PORT")
     smtp_user = os.getenv("SMTP_USERNAME")
-    smtp_pass = os.getenv("SMTP_PASSWORD")
+    oauth_client_id = os.getenv("GMAIL_OAUTH_CLIENT_ID")
+    oauth_client_secret = os.getenv("GMAIL_OAUTH_CLIENT_SECRET")
+    oauth_refresh_token = os.getenv("GMAIL_OAUTH_REFRESH_TOKEN")
     from_email = os.getenv("SMTP_FROM_EMAIL")
 
     hoy = datetime.now().date()
@@ -493,8 +520,13 @@ if __name__ == "__main__":
         total_peticiones = 0
         total_notificaciones = 0
         correos_enviados = 0
+        access_token = None
 
         try:
+            # Se pide un access token nuevo al toque: son de corta duración (~1h) y
+            # alcanza y sobra para una corrida de unos pocos minutos.
+            access_token = obtener_access_token_oauth(oauth_client_id, oauth_client_secret, oauth_refresh_token)
+
             with requests.Session() as session:
                 mapa_usuarios = fetch_redmine_users(session, url, redmine_key)
                 peticiones = fetch_redmine_issues(session, url, redmine_key)
@@ -512,7 +544,7 @@ if __name__ == "__main__":
                         smtp_server,
                         smtp_port,
                         smtp_user,
-                        smtp_pass,
+                        access_token,
                         from_email,
                         url
                     )
@@ -535,7 +567,16 @@ if __name__ == "__main__":
             if error_texto:
                 detalle += ["", f"Error: {error_texto}"]
 
-            enviar_resumen_ejecucion(estado, detalle, smtp_server, smtp_port, smtp_user, smtp_pass, from_email)
+            if access_token is None:
+                # El error puede haber pasado antes de conseguir el token (ej. Redmine
+                # caído); reintentamos una vez más acá para no perder el aviso.
+                try:
+                    access_token = obtener_access_token_oauth(oauth_client_id, oauth_client_secret, oauth_refresh_token)
+                except Exception as e:
+                    print(f"[ERROR] No se pudo obtener un access token para mandar el resumen: {e}")
+
+            if access_token:
+                enviar_resumen_ejecucion(estado, detalle, smtp_server, smtp_port, smtp_user, access_token, from_email)
 
         if estado == "CON ERROR":
             raise SystemExit(1)
