@@ -38,6 +38,9 @@ CORREO_ADMIN = "francoalbrecht@rivarossa.com"
 # nombre real ("Apellido, Nombre") de forma flexible (sin importar mayúsculas).
 EXCEPCIONES_DESTINO = {
     "previotto, gisela": CORREO_ADMIN,
+    # vgorreta@rivarossa.com no existe / rebota ("no se ha encontrado la
+    # dirección"); mientras no se confirme la casilla real, se redirige a admin.
+    "gorreta, valentina": CORREO_ADMIN,
 }
 
 # Motor de reglas de notificación: cada tracker (tipo de petición) define con
@@ -463,7 +466,36 @@ def enviar_resumen_ejecucion(estado, detalle_lineas, smtp_server, smtp_port, smt
         # error original ni romper el resto del cierre del script.
         print(f"[ERROR] No se pudo enviar el resumen de ejecución a {destino}: {e}")
 
+def ya_hubo_envio_exitoso_hoy():
+    """Consulta la API de GitHub Actions para ver si ya hubo otra corrida exitosa
+    de este mismo workflow hoy. Se usa para poder tener disparos de respaldo más
+    tarde en la mañana (ver reporte-vencimientos.yml) sin duplicar los avisos si
+    el disparo original ya salió bien. Fuera de GitHub Actions (ej. corrida local)
+    no hay forma de chequear esto, así que se asume que no y se sigue de largo."""
+    repo = os.getenv("GITHUB_REPOSITORY")
+    token = os.getenv("GITHUB_TOKEN")
+    run_id_actual = os.getenv("GITHUB_RUN_ID")
+    if not repo or not token:
+        return False
+    try:
+        url_api = f"https://api.github.com/repos/{repo}/actions/workflows/reporte-vencimientos.yml/runs"
+        headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github+json"}
+        hoy = datetime.now().date().isoformat()
+        resp = requests.get(url_api, headers=headers, timeout=10,
+                             params={"status": "success", "created": f">={hoy}", "per_page": 10})
+        resp.raise_for_status()
+        runs = resp.json().get("workflow_runs", [])
+        return any(str(r.get("id")) != str(run_id_actual) for r in runs)
+    except Exception as e:
+        print(f"[WARN] No se pudo chequear corridas previas de hoy ({e}); se continúa igual.")
+        return False
+
 if __name__ == "__main__":
+    if ya_hubo_envio_exitoso_hoy():
+        print("Ya hubo una ejecución exitosa hoy — se omite este disparo (de respaldo) "
+              "para no duplicar los avisos.")
+        raise SystemExit(0)
+
     url = os.getenv("REDMINE_URL")
     redmine_key = os.getenv("REDMINE_API_KEY")
     
