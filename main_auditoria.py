@@ -104,6 +104,7 @@ USUARIOS_FALLBACK_AUDITORIA = {
 # sólo las excluye de este correo.
 IDS_EXCLUIDOS_AUDITORIA = {
     "792",  # Caravario, Darién - ya no es empleado (2026-09)
+    "243",  # Berger, David - no debe recibir el reporte de auditoría (pedido 2026-09-23)
 }
 
 def _normalizar_texto(texto):
