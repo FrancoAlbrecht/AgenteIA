@@ -3,10 +3,9 @@ import requests
 import smtplib
 import base64
 import unicodedata
-from datetime import datetime, timedelta, date
+from datetime import datetime, date
 from email.message import EmailMessage
 from dotenv import load_dotenv
-from feriados import FERIADOS
 
 load_dotenv()
 
@@ -56,7 +55,8 @@ LOGO_BASE64 = cargar_logo_base64()
 # Modo Prueba: mientras esté en True, TODOS los correos de auditoría se
 # redirigen a CORREO_ADMIN_AUDITORIA (con los nombres y datos reales de cada
 # destinatario en el cuerpo). Es independiente del modo del sector impuestos.
-REDIRIGIR_A_ADMIN_AUDITORIA = True
+# En producción desde el 24/09/2026.
+REDIRIGIR_A_ADMIN_AUDITORIA = False
 CORREO_ADMIN_AUDITORIA = "francoalbrecht@rivarossa.com"
 
 # Excepciones puntuales: personas cuyo correo, aun en producción, debe seguir
@@ -64,7 +64,8 @@ CORREO_ADMIN_AUDITORIA = "francoalbrecht@rivarossa.com"
 EXCEPCIONES_DESTINO_AUDITORIA = {}
 
 # Trackers (tipos de petición) del sector auditoría que este reporte cubre.
-TRACKERS_AUDITORIA = ["CyA Balance", "CyA Auditoria", "CyA Corte"]
+# El orden de esta lista es también el orden en que aparecen los bloques en el correo.
+TRACKERS_AUDITORIA = ["CyA Balance", "CyA Corte", "CyA Auditoria"]
 
 # Estado que deben tener las peticiones para ser incluidas.
 ESTADO_FILTRO_AUDITORIA = "Pendiente"
@@ -72,9 +73,15 @@ ESTADO_FILTRO_AUDITORIA = "Pendiente"
 # Nombre del campo personalizado que define la fecha de cierre de la OT.
 CAMPO_FECHA_CIERRE = "FECHA DE CIERRE OT"
 
-# Día del mes en que se envía el reporte (se ajusta al día hábil siguiente si
-# el día 20 cae en fin de semana o feriado, ver dia_envio_efectivo).
-DIA_CORTE_MENSUAL = 20
+# Día del mes en que se envía el reporte. Se manda ese día sea hábil o no
+# (fin de semana y feriados incluidos).
+DIA_CORTE_MENSUAL = 21
+
+# Envíos puntuales fuera del día de corte mensual. Tras la fecha pasan a ser
+# inofensivas (nunca vuelven a coincidir con hoy).
+FECHAS_ENVIO_EXTRA = {
+    date(2026, 9, 24),  # primer envío en producción, fuera del corte mensual
+}
 
 # Campos personalizados que asignan personas a una petición, y la etiqueta con
 # la que se muestran en el correo. Una misma persona puede figurar en más de
@@ -112,17 +119,10 @@ def formatear_fecha(fecha_str):
     except ValueError:
         return fecha_str
 
-def es_dia_habil(fecha):
-    """Lunes a viernes y que no esté en el calendario de feriados/no laborables de feriados.py"""
-    return fecha.weekday() < 5 and fecha not in FERIADOS
-
 def dia_envio_efectivo(anio, mes, dia_objetivo=DIA_CORTE_MENSUAL):
-    """Devuelve la fecha efectiva de envío del reporte mensual: el día 20 del mes
-    indicado, o el primer día hábil siguiente si el 20 cae en fin de semana o feriado."""
-    fecha = date(anio, mes, dia_objetivo)
-    while not es_dia_habil(fecha):
-        fecha += timedelta(days=1)
-    return fecha
+    """Devuelve la fecha de envío del reporte mensual: el día de corte del mes
+    indicado, sin correrlo aunque caiga en fin de semana o feriado."""
+    return date(anio, mes, dia_objetivo)
 
 def mes_siguiente(anio, mes):
     """Devuelve (año, mes) del mes calendario siguiente."""
@@ -508,7 +508,7 @@ if __name__ == "__main__":
     # Permite forzar el envío en una fecha distinta a la del corte mensual, para pruebas manuales.
     forzar_envio = os.getenv("FORZAR_ENVIO_AUDITORIA", "").strip() == "1"
 
-    if hoy != fecha_envio_mes_actual and not forzar_envio:
+    if hoy != fecha_envio_mes_actual and hoy not in FECHAS_ENVIO_EXTRA and not forzar_envio:
         print(f"[INFO] Hoy ({hoy}) no es el día de envío del reporte mensual de auditoría "
               f"(corresponde el {fecha_envio_mes_actual}). No se envían correos.")
     else:
