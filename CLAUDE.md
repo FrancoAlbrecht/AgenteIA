@@ -5,9 +5,9 @@ Automatizaciones que leen Redmine y mandan avisos por correo. Dos scripts, dos w
 | Script | Workflow | Qué hace | Cuándo corre |
 |---|---|---|---|
 | `main_impuestos.py` | `.github/workflows/reporte-vencimientos.yml` | Avisa a cada responsable sus vencimientos tributarios próximos (II BB, DREI, CM, IVA, Sicore, Ag. Recaudación) | Todos los días, con 2 disparos de respaldo |
-| `main_auditoria.py` | `.github/workflows/reporte-auditoria.yml` | Reporte mensual de auditoría | Día 20 de cada mes (o el hábil siguiente), el workflow corre todos los días pero el script decide internamente si corresponde enviar |
+| `main_auditoria.py` | `.github/workflows/reporte-auditoria.yml` | Reporte mensual de auditoría (bloques en orden: CyA Balance, CyA Corte, CyA Auditoria) | Día 21 de cada mes, sea hábil o no (desde oct/2026). El workflow corre todos los días pero el script decide internamente si corresponde enviar |
 
-`feriados.py` tiene el calendario de feriados/no laborables usado para calcular días hábiles en ambos scripts.
+`feriados.py` tiene el calendario de feriados/no laborables usado para calcular días hábiles en `main_impuestos.py` (auditoría ya no lo usa: manda siempre el 21).
 
 Ambos scripts comparten el mismo patrón: descargan de Redmine → arman el HTML por persona → mandan por SMTP (Gmail) → siempre mandan un correo de resumen de ejecución a `francoalbrecht@rivarossa.com` (éxito o error), para que un fallo nunca sea silencioso.
 
@@ -34,7 +34,7 @@ Se migró a **OAuth2 (XOAUTH2)**:
 
 - **Gorreta, Valentina**: su email en Redmine (`valentinagorreta@rivarossa.com`) rebota (dirección inexistente). Mientras no se confirme/corrija la casilla real, su reporte se redirige a `francoalbrecht@rivarossa.com` (mismo mecanismo que ya existía para Previotto, Gisela — ver diccionario `EXCEPCIONES_DESTINO` en `main_impuestos.py`). Login de Redmine de Valentina es `vgorreta`, así que `vgorreta@rivarossa.com` es la dirección más probable si alguien la confirma.
 - **Migración a Mailgun**: se evaluó y se llegó a crear una cuenta/dominio (`mg.rivarossa.com`) en Mailgun, pero **no se completó** por falta de acceso al DNS de `rivarossa.com` (lo administra un tercero, hosting BAEHOST). La cuenta de Mailgun queda creada y sin usar, por si en algún momento se consigue ese acceso.
-- **No confundir**: la fecha de corte de auditoría es el día 20 de cada mes; el 20/09/2026 cae domingo, así que el próximo envío real sería el 21/09.
+- **Auditoría en producción desde el 24/09/2026** (`REDIRIGIR_A_ADMIN_AUDITORIA = False`): ese día hubo un envío puntual fuera de corte (`FECHAS_ENVIO_EXTRA`); a partir de ahí sale todos los 21, aunque caiga fin de semana o feriado. El envío del 21/09 fue todavía en modo prueba (todo a admin).
 
 ## Historial reciente (sesión del 15/09/2026)
 
