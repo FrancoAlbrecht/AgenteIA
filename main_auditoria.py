@@ -2,6 +2,7 @@ import os
 import requests
 import smtplib
 import base64
+import calendar
 import unicodedata
 from datetime import datetime, date
 from email.message import EmailMessage
@@ -200,17 +201,21 @@ def fetch_redmine_issues(session, redmine_url, api_key):
 
 def process_redmine_auditoria(issues, hoy=None):
     """Filtra las peticiones de auditoría (CyA Balance / CyA Auditoria / CyA Corte,
-    en estado Pendiente) cuya Fecha de cierre OT cae dentro de la ventana mensual
-    actual (hoy hasta el próximo día de envío del mes siguiente, inclusive), y
-    arma un único registro por persona por petición aunque ocupe varios roles.
-    Las peticiones con Fecha de cierre OT anterior a hoy quedan fuera: ya
-    tuvieron su oportunidad de aparecer en un reporte anterior.
+    en estado Pendiente) cuya Fecha de cierre OT cae dentro de la ventana del
+    reporte (hoy hasta el último día del mes siguiente, inclusive), y arma un
+    único registro por persona por petición aunque ocupe varios roles.
+    Lo que vence entre el día 21 y fin de ese mes aparece en dos reportes
+    seguidos (a modo de segundo aviso). Las peticiones con Fecha de cierre OT
+    anterior a hoy quedan fuera: ya aparecieron en un reporte anterior.
+    No se filtra por proyecto: los tipos CyA son exclusivos de auditoría, así
+    que entran aunque estén cargadas fuera del subproyecto de Auditoría (ver
+    detectar_fuera_de_proyecto_auditoria).
     Devuelve: { persona_id: { tipo_peticion: { fecha_cierre_ot: [tareas] } } }"""
     if hoy is None:
         hoy = datetime.now().date()
 
     anio_sig, mes_sig = mes_siguiente(hoy.year, hoy.month)
-    proximo_corte = dia_envio_efectivo(anio_sig, mes_sig)
+    fin_ventana = date(anio_sig, mes_sig, calendar.monthrange(anio_sig, mes_sig)[1])
 
     notificaciones = {}
     descartadas_sin_fecha = 0
@@ -223,9 +228,7 @@ def process_redmine_auditoria(issues, hoy=None):
         estado = issue.get("status", {}).get("name", "")
         asunto = issue.get("subject", "")
 
-        es_proyecto_auditoria = "AUDITORIA" in _normalizar_texto(proyecto).upper()
-
-        if tipo in TRACKERS_AUDITORIA and es_proyecto_auditoria and estado == ESTADO_FILTRO_AUDITORIA:
+        if tipo in TRACKERS_AUDITORIA and estado == ESTADO_FILTRO_AUDITORIA:
             campos = issue.get("custom_fields", [])
 
             fecha_cierre_ot = ""
@@ -243,7 +246,7 @@ def process_redmine_auditoria(issues, hoy=None):
                     roles_por_persona.setdefault(valor, []).append(ROLES_AUDITORIA[nombre])
 
             # --- Filtro por Fecha de cierre OT: sólo entra en el reporte si cae de hoy
-            # en adelante y hasta el próximo corte mensual (inclusive). Lo que ya venció
+            # en adelante y hasta fin del mes siguiente (inclusive). Lo que ya venció
             # queda afuera: se asume que ya apareció en el reporte del mes que le
             # correspondía, y no se repite en los siguientes. ---
             try:
@@ -256,7 +259,7 @@ def process_redmine_auditoria(issues, hoy=None):
                 descartadas_vencidas += 1
                 continue
 
-            if fecha_cierre_dt > proximo_corte:
+            if fecha_cierre_dt > fin_ventana:
                 descartadas_fuera_de_rango += 1
                 continue
 
@@ -285,8 +288,22 @@ def process_redmine_auditoria(issues, hoy=None):
 
     print(f"Filtrado por Fecha de cierre OT: {descartadas_sin_fecha} sin fecha válida, "
           f"{descartadas_vencidas} ya vencidas (antes de hoy, {hoy}), "
-          f"{descartadas_fuera_de_rango} fuera de la ventana mensual (próximo corte: {proximo_corte}).")
+          f"{descartadas_fuera_de_rango} fuera de la ventana (hasta: {fin_ventana}).")
     return notificaciones
+
+def detectar_fuera_de_proyecto_auditoria(issues):
+    """Devuelve una línea de texto por cada petición CyA Pendiente cargada en un
+    proyecto que no es de Auditoría. Igual entran en el reporte; esto es sólo
+    para avisar en el resumen de ejecución y que se corrijan en Redmine."""
+    lineas = []
+    for issue in issues:
+        proyecto = issue.get("project", {}).get("name", "")
+        tipo = issue.get("tracker", {}).get("name", "")
+        estado = issue.get("status", {}).get("name", "")
+        if (tipo in TRACKERS_AUDITORIA and estado == ESTADO_FILTRO_AUDITORIA
+                and "AUDITORIA" not in _normalizar_texto(proyecto).upper()):
+            lineas.append(f"  #{issue.get('id')} - {proyecto} - {tipo} - {issue.get('subject', '')}")
+    return lineas
 
 def armar_html_persona(nombre_real, datos_por_tipo, redmine_url):
     """Genera el cuerpo HTML del reporte de auditoría para una persona.
@@ -521,6 +538,7 @@ if __name__ == "__main__":
         total_peticiones = 0
         total_notificaciones = 0
         correos_enviados = 0
+        fuera_de_proyecto = []
         access_token = None
 
         try:
@@ -535,6 +553,7 @@ if __name__ == "__main__":
             total_peticiones = len(peticiones)
 
             if peticiones:
+                fuera_de_proyecto = detectar_fuera_de_proyecto_auditoria(peticiones)
                 notificaciones_por_persona = process_redmine_auditoria(peticiones, hoy)
                 total_notificaciones = len(notificaciones_por_persona)
 
@@ -565,6 +584,10 @@ if __name__ == "__main__":
                 f"Personas con peticiones de auditoría a notificar: {total_notificaciones}",
                 f"Correos enviados con éxito: {correos_enviados}",
             ]
+            if fuera_de_proyecto:
+                detalle += ["", "Peticiones de auditoría cargadas fuera del subproyecto de Auditoría "
+                                "(igual se incluyeron en el reporte; conviene moverlas en Redmine):"]
+                detalle += fuera_de_proyecto
             if error_texto:
                 detalle += ["", f"Error: {error_texto}"]
 
