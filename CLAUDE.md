@@ -48,4 +48,4 @@ Se migró a **OAuth2 (XOAUTH2)**:
 5. Se evaluó y descartó (por ahora) la migración a Mailgun.
 6. Se borró el secret `SMTP_PASSWORD`, ya sin uso en el repo.
 
-Todo el código y los workflows están pusheados a `main` (último commit: `3cf8fd0`).
+Todo el código y los workflows están pusheados a `main` (último cambio funcional: `06ef395`, ventana de auditoría hasta fin del mes siguiente y sin filtro por proyecto).
