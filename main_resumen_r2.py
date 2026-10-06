@@ -313,14 +313,11 @@ def tabla_carga_por_persona(notificaciones, users_map, orden_tipos):
          for total, n, c in filas])
     return html
 
-def armar_cuerpo(nombre_r2, correo_r2, cuerpo_sector, cantidad, texto_intro):
+def armar_cuerpo(nombre_r2, cuerpo_sector, cantidad, texto_intro):
+    # Sin cartel de modo prueba (pedido del 06/10/2026): el correo de prueba se ve
+    # igual al de producción. A quién le llegaría figura en el resumen de ejecución.
     nombre_pila = nombre_r2.split(" ")[0] if nombre_r2 else ""
-    html = ""
-    if REDIRIGIR_A_ADMIN_R2:
-        html += (f'<p style="font-size: 12px; margin: 0 0 20px 0; padding: 8px 12px; background-color: #fff4d6; '
-                 f'border: 1px solid #e6c65c; border-radius: 3px; color: #7a5b00;">MODO PRUEBA — en producción este '
-                 f'resumen le llegaría a {nombre_r2} ({correo_r2 or "sin correo en Redmine"}).</p>')
-    html += (f'<p style="font-size: 15px; line-height: 1.6; margin: 0 0 20px 0;"><strong>Hola {nombre_pila},</strong><br>'
+    html = (f'<p style="font-size: 15px; line-height: 1.6; margin: 0 0 20px 0;"><strong>Hola {nombre_pila},</strong><br>'
              f'{texto_intro} Son <strong>{cantidad}</strong> peticiones; cada una aparece una sola vez, '
              f'con todas las personas que intervienen.</p>')
     return html + cuerpo_sector
@@ -397,7 +394,7 @@ def preparar_resumenes(issues, users_map, hoy, redmine_url, sectores):
             destino, etiqueta = correo_r2, "[PRODUCCIÓN]"
         else:
             destino, etiqueta = CORREO_ADMIN_R2, "[SIN CORREO -> ADMIN]"
-        html = armar_plantilla(armar_cuerpo(nombre_r2, correo_r2, cuerpo, cant, intro))
+        html = armar_plantilla(armar_cuerpo(nombre_r2, cuerpo, cant, intro))
         asunto = f"Resumen del equipo de {titulo} - {hoy.strftime('%d/%m/%Y')}"
         resumenes.append((sector, nombre_r2, destino, etiqueta, asunto, html, cant))
     return resumenes
