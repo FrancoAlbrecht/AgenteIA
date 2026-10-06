@@ -19,10 +19,15 @@ import main_auditoria as aud
 # sola vez, en una fila de tabla, con todas las personas involucradas: así el
 # resumen de impuestos baja de ~120 tarjetas a ~40 filas por día.
 
-# Modo Prueba: mientras esté en True, todos los resúmenes van a CORREO_ADMIN_R2
-# (con un cartel amarillo que indica a quién le llegaría en producción).
-REDIRIGIR_A_ADMIN_R2 = True
+# Modo Prueba: si está en True, todos los resúmenes van a CORREO_ADMIN_R2 en vez
+# de a cada R2. En producción desde el 06/10/2026.
+REDIRIGIR_A_ADMIN_R2 = False
 CORREO_ADMIN_R2 = "francoalbrecht@rivarossa.com"
+
+# Sectores cuyo resumen R2 está activo. El de auditoría (Matías) queda en pausa
+# hasta que el usuario lo hable con él: para activarlo, agregar "auditoria".
+# Se puede pisar en una corrida manual con SECTORES_R2=impuestos,auditoria.
+SECTORES_ACTIVOS_R2 = {"impuestos"}
 
 # ID de Redmine de cada R2 (el correo se toma de Redmine).
 R2_POR_SECTOR = {
@@ -470,7 +475,8 @@ if __name__ == "__main__":
     # SOLO_VISTA_PREVIA=1: no manda nada, guarda los HTML en ./vista_previa_r2/ para revisarlos.
     # SECTORES_R2=impuestos,auditoria: permite correr sólo uno de los dos.
     solo_vista_previa = os.getenv("SOLO_VISTA_PREVIA") == "1"
-    sectores = {s.strip() for s in os.getenv("SECTORES_R2", "impuestos,auditoria").split(",") if s.strip()}
+    sectores = ({s.strip() for s in os.getenv("SECTORES_R2").split(",") if s.strip()}
+                if os.getenv("SECTORES_R2") else SECTORES_ACTIVOS_R2)
     hoy = fecha_de_hoy()
     print(f"Fecha de proceso: {hoy.isoformat()}" + (" (simulada)" if os.getenv("FECHA_SIMULADA") else ""))
 
