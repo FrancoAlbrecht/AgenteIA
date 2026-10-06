@@ -2,12 +2,12 @@ name: Notificación de Consultorías
 
 on:
   schedule:
-    # Cada 2 horas (en un minuto que no sea en punto), de lunes a viernes:
-    # 07:17, 09:17, 11:17, 13:17, 15:17, 17:17 y 19:17 ART (10 a 22 UTC).
-    # Lo que se cargue de noche o el fin de semana se avisa en la primera
-    # corrida del día hábil siguiente: cada corrida revisa desde la última
-    # exitosa, así que no se pierde nada aunque GitHub saltee o atrase disparos.
-    - cron: '17 10-22/2 * * 1-5'
+    # Cada 30 minutos (en minutos que no sean en punto), de lunes a viernes de
+    # 07:17 a 19:47 ART (10 a 22 UTC). Lo que se cargue de noche o el fin de
+    # semana se avisa en la primera corrida del día hábil siguiente: cada
+    # corrida revisa desde la última exitosa, así que no se pierde nada aunque
+    # GitHub saltee o atrase disparos.
+    - cron: '17,47 10-22 * * 1-5'
   workflow_dispatch:        # permite disparo manual desde la pestaña Actions, para pruebas
 
 # Nunca dos corridas a la vez: la segunda espera a que termine la primera, así
