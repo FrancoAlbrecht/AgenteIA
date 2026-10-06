@@ -363,15 +363,12 @@ def describir_cambio(detalle, redmine, users_map):
         etiqueta = nombre
     return f"{etiqueta}: {viejo or '(vacío)'} → {nuevo or '(vacío)'}"
 
-def armar_html_persona(nombre_real, correo_real, items, redmine, users_map, redmine_url):
+def armar_html_persona(nombre_real, items, redmine, users_map, redmine_url):
+    # Sin cartel de modo prueba (pedido del 06/10/2026): el correo de prueba se ve
+    # igual al de producción. A quién le llegaría figura en el resumen de ejecución.
     nombre_pila = nombre_real.split(",")[1].strip() if "," in nombre_real else nombre_real
-    cuerpo = ""
-    if REDIRIGIR_A_ADMIN_CONSULTORIAS:
-        cuerpo += (f'<p style="font-size: 12px; margin: 0 0 20px 0; padding: 8px 12px; background-color: #fff4d6; '
-                   f'border: 1px solid #e6c65c; border-radius: 3px; color: #7a5b00;">MODO PRUEBA — en producción este '
-                   f'aviso le llegaría a {html.escape(nombre_real)} ({html.escape(correo_real or "sin correo")}).</p>')
     hay_nuevas = any(e["tipo"] == "nueva" for _, _, evs in items for e in evs)
-    cuerpo += (f'<p style="font-size: 15px; line-height: 1.6; margin: 0 0 20px 0;"><strong>Hola {html.escape(nombre_pila)},</strong><br>'
+    cuerpo = (f'<p style="font-size: 15px; line-height: 1.6; margin: 0 0 20px 0;"><strong>Hola {html.escape(nombre_pila)},</strong><br>'
                f'{"Se cargaron o actualizaron" if hay_nuevas else "Se actualizaron"} consultas de clientes de consultoría '
                f'que te tocan atender:</p>')
 
@@ -468,7 +465,7 @@ def preparar_correos(avisos, redmine, users_map, redmine_url):
             asunto = f"[Consultoría] {prefijo} #{issue['id']}: {issue.get('subject', '')}"
         else:
             asunto = f"[Consultoría] {len(items)} consultas con novedades"
-        html_correo = armar_html_persona(nombre_real, correo_real, items, redmine, users_map, redmine_url)
+        html_correo = armar_html_persona(nombre_real, items, redmine, users_map, redmine_url)
         correos.append((persona_id, nombre_real, destino, etiqueta, asunto, html_correo, [i["id"] for i, _, _ in items]))
     return correos
 
