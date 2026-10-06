@@ -1,12 +1,31 @@
 # AgenteIA — Estudio Rivarossa
 
-Automatizaciones que leen Redmine y mandan avisos por correo. Tres scripts (laboral todavía en desarrollo) y sus workflows de GitHub Actions:
+Automatizaciones que leen Redmine y mandan avisos por correo. Cinco scripts (laboral todavía en desarrollo) y sus workflows de GitHub Actions:
 
 | Script | Workflow | Qué hace | Cuándo corre |
 |---|---|---|---|
 | `main_impuestos.py` | `.github/workflows/reporte-vencimientos.yml` | Avisa a cada responsable sus vencimientos tributarios próximos (II BB, DREI, CM, IVA, Sicore, Ag. Recaudación) | Todos los días, con 2 disparos de respaldo |
-| `main_auditoria.py` | `.github/workflows/reporte-auditoria.yml` | Reporte mensual de auditoría (bloques en orden: CyA Balance, CyA Corte, CyA Auditoria) | Día 21 de cada mes, sea hábil o no (desde oct/2026). El workflow corre todos los días pero el script decide internamente si corresponde enviar |
-| `main_laboral.py` | **todavía no tiene** | Avisos del sector laboral. **EN DESARROLLO, en modo prueba** (ver sección "Sector Laboral") | Sólo se corre a mano por ahora |
+| `main_auditoria.py` | `.github/workflows/reporte-auditoria.yml` | Reporte mensual de auditoría (bloques en orden: CyA Balance, CyA Corte, CyA Auditoria) | Día 21 de cada mes, sea hábil o no (desde oct/2026). El workflow corre todos los días (03:13 ART desde el 06/10/2026) pero el script decide internamente si corresponde enviar |
+| `main_resumen_r2.py` | `.github/workflows/resumen-r2.yml` | Resumen unificado para el R2 (subgerente) de cada sector (ver sección "Resumen R2") | Todos los días ~03:31 ART, con 2 disparos de respaldo |
+| `main_consultorias.py` | `.github/workflows/notificacion-consultorias.yml` | Avisa por correo las consultas de clientes de consultoría nuevas o editadas (ver sección "Consultorías") | Cada 30 min, lunes a viernes 07:17 a 19:47 ART |
+| `main_laboral.py` | **todavía no tiene** | Avisos del sector laboral. **EN DESARROLLO, en modo prueba, EN PAUSA** (ver sección "Sector Laboral") | Sólo se corre a mano por ahora |
+
+**Ojo con los horarios:** GitHub atrasa los "schedule" de este repo 6 a 9 horas (medido el 06/10/2026: el disparo de 03:24 ART de impuestos sale ~10-12 ART). No adelantar ningún cron antes de las 03:00 UTC (00:00 ART): los scripts toman la fecha en UTC y mandarían el reporte del día siguiente.
+
+## Resumen R2 (`main_resumen_r2.py`) — desde el 06/10/2026
+
+Un único correo por sector para su R2, que unifica lo que ese día les llegó a las personas a su cargo: cada petición aparece una sola vez (fila de tabla con todo el equipo y la etapa), más las peticiones que no le llegaron a nadie por no tener responsables. Reutiliza `process_redmine_data` / `process_redmine_auditoria` importando los otros scripts (sin modificarlos).
+- **Impuestos → Cintia Margaria (542): EN PRODUCCIÓN.** Sin Pogonza ni Boretto (`FUERA_DEL_EQUIPO_R2`), sin la tabla "Carga por persona" (`MOSTRAR_CARGA_POR_PERSONA`), y sin peticiones viejas (sólo lo que vence en 2 días hábiles).
+- **Auditoría → Matías Depetris (717): EN PAUSA** (`SECTORES_ACTIVOS_R2 = {"impuestos"}`) hasta que el usuario lo hable con él. Saldría el 21, sin Molfino, Mauricio Fenoglio, Luisina Trinca ni Luis Borgogno.
+- Prueba local: `SOLO_VISTA_PREVIA=1 FECHA_SIMULADA=2026-10-21 SECTORES_R2=impuestos,auditoria python main_resumen_r2.py` (HTML en `vista_previa_r2/`).
+
+## Consultorías (`main_consultorias.py`) — EN PRODUCCIÓN desde el 06/10/2026
+
+Los clientes de consultoría (proyectos `federicocaglieris` y `evelynsaires` en `PROYECTOS_CONSULTORIA`, con sus subproyectos) cargan consultas en Redmine y Redmine no avisa. Cada corrida revisa lo creado/editado desde el inicio de la última corrida exitosa del workflow (vía API de GitHub), así que no se pierde nada aunque GitHub saltee disparos.
+- Destinatarios: el asignado (ej. Patricio Pogonza); si está asignada al grupo `CONSULTORIA X` o sin asignar, los miembros del grupo (Borgogno, Boretto, Mihlager).
+- Nunca avisa a alguien de su propia acción ni a casillas que no sean `@rivarossa.com` (los clientes nunca reciben nada).
+- El repo es público: el log sólo imprime números de petición, nunca el contenido de las consultas.
+- Prueba local: `SOLO_VISTA_PREVIA=1 VENTANA_DESDE=2026-10-01T00:00:00Z python main_consultorias.py`.
 
 `feriados.py` tiene el calendario de feriados/no laborables usado para calcular días hábiles en `main_impuestos.py` (auditoría ya no lo usa: manda siempre el 21).
 
@@ -83,4 +102,4 @@ Al 28/09/2026 no había ninguna petición abierta de los trackers SICORE / SIRAD
 5. Se evaluó y descartó (por ahora) la migración a Mailgun.
 6. Se borró el secret `SMTP_PASSWORD`, ya sin uso en el repo.
 
-Todo el código y los workflows están pusheados a `main`. Último trabajo (28/09/2026): primera versión de `main_laboral.py` (Leyes Sociales + Domésticas, en modo prueba).
+Último trabajo (06/10/2026): auditoría pasa a dispararse 03:13 ART; se agregan el resumen R2 (impuestos en producción, auditoría en pausa) y la notificación de consultorías (en producción). Laboral queda en pausa.
