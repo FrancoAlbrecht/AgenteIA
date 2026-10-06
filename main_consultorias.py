@@ -51,9 +51,11 @@ LOGO_BASE64 = cargar_logo_base64()
 # notificacion-consultorias.yml), busca las peticiones creadas o editadas desde
 # la corrida anterior y le manda un correo a quien corresponda atenderlas.
 
-# Modo Prueba: mientras esté en True, todos los avisos van a CORREO_ADMIN_CONSULTORIAS
-# (con un cartel amarillo que indica a quién le llegaría en producción).
-REDIRIGIR_A_ADMIN_CONSULTORIAS = True
+# Modo Prueba: si está en True, todos los avisos van a CORREO_ADMIN_CONSULTORIAS
+# en vez de a cada persona. En producción desde el 06/10/2026.
+# Hoy los avisos llegan a Borgogno, Boretto o Mihlager (grupos CONSULTORIA X)
+# o a quien esté asignado, por ejemplo Patricio Pogonza.
+REDIRIGIR_A_ADMIN_CONSULTORIAS = False
 CORREO_ADMIN_CONSULTORIAS = "francoalbrecht@rivarossa.com"
 
 # Identificadores de Redmine de los proyectos de consultoría (incluye sus
