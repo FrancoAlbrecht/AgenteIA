@@ -2,9 +2,14 @@ name: Reporte Mensual de Auditoría
 
 on:
   schedule:
-    - cron: '0 10 * * *'  # 07:00 ART, todos los días; el script decide internamente
-                           # si hoy corresponde al día de envío mensual (día 20, o el
-                           # día hábil siguiente si cae en fin de semana o feriado)
+    # Corre todos los días; el script decide internamente si hoy corresponde
+    # enviar (el 21 de cada mes, sea hábil o no). Se dispara de madrugada y en
+    # un minuto que no sea en punto porque GitHub retrasa los "schedule" varias
+    # horas (ver reporte-vencimientos.yml): así el correo sale a la mañana.
+    # Ojo: no adelantarlo antes de las 03:00 UTC (00:00 ART), porque el script
+    # toma la fecha en UTC y antes de esa hora en UTC ya es el día siguiente
+    # (en ART todavía no): mandaría el reporte del 21 la noche del 20.
+    - cron: '13 6 * * *'  # dispara a las 03:13 ART
   workflow_dispatch:        # permite disparo manual desde la pestaña Actions, para pruebas
 
 permissions:
