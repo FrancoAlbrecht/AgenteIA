@@ -33,6 +33,11 @@ R2_POR_SECTOR = {
 # Personas del sector que NO están a cargo del R2 (pedido del 06/10/2026). Sus
 # peticiones no entran en el resumen, salvo que también intervenga alguien que
 # sí esté a cargo del R2 (en ese caso la fila muestra al equipo completo).
+MOSTRAR_CARGA_POR_PERSONA = {
+    "impuestos": False,  # Cintia no la quiere (pedido del 06/10/2026)
+    "auditoria": True,   # a confirmar con Matías
+}
+
 FUERA_DEL_EQUIPO_R2 = {
     "impuestos": {
         "579",  # Pogonza, Patricio
@@ -173,7 +178,9 @@ def armar_resumen_impuestos(issues, users_map, hoy, redmine_url):
     issues_por_id = {i.get("id"): i for i in issues}
     orden_tipos = list(imp.REGLAS_NOTIFICACION.keys())
 
-    html = tabla_carga_por_persona(solo_equipo(notificaciones, fuera), users_map, orden_tipos)
+    html = ""
+    if MOSTRAR_CARGA_POR_PERSONA["impuestos"]:
+        html += tabla_carga_por_persona(solo_equipo(notificaciones, fuera), users_map, orden_tipos)
 
     tipos = sorted({p["tipo"] for p in por_peticion.values()}, key=orden_tipos.index)
     for tipo in tipos:
@@ -241,7 +248,9 @@ def armar_resumen_auditoria(issues, users_map, hoy, redmine_url):
 
     orden_tipos = aud.TRACKERS_AUDITORIA
     orden_roles = list(aud.ROLES_AUDITORIA.values())
-    html = tabla_carga_por_persona(solo_equipo(notificaciones, fuera), users_map, orden_tipos)
+    html = ""
+    if MOSTRAR_CARGA_POR_PERSONA["auditoria"]:
+        html += tabla_carga_por_persona(solo_equipo(notificaciones, fuera), users_map, orden_tipos)
 
     tipos = sorted({p["tipo"] for p in por_peticion.values()}, key=orden_tipos.index)
     for tipo in tipos:
