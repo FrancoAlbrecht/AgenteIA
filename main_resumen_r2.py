@@ -1,7 +1,6 @@
 import os
 import requests
 import smtplib
-from collections import Counter
 from datetime import datetime
 from email.message import EmailMessage
 
@@ -29,6 +28,22 @@ CORREO_ADMIN_R2 = "francoalbrecht@rivarossa.com"
 R2_POR_SECTOR = {
     "impuestos": "542",  # Margaria, Cintia
     "auditoria": "717",  # Depetris, Matías
+}
+
+# Personas del sector que NO están a cargo del R2 (pedido del 06/10/2026). Sus
+# peticiones no entran en el resumen, salvo que también intervenga alguien que
+# sí esté a cargo del R2 (en ese caso la fila muestra al equipo completo).
+FUERA_DEL_EQUIPO_R2 = {
+    "impuestos": {
+        "579",  # Pogonza, Patricio
+        "494",  # Boretto, Facundo
+    },
+    "auditoria": {
+        "597",  # Molfino, Tobías
+        "568",  # Fenoglio, Mauricio
+        "254",  # Trinca, Luisina
+        "242",  # Borgogno, Luis
+    },
 }
 
 # Columnas cortas para la tabla "carga por persona".
@@ -97,10 +112,12 @@ def campos_de(issue):
         res[c.get("name", "").strip().upper()] = str(valor).strip() if valor not in (None, "") else ""
     return res
 
-def invertir_por_peticion(notificaciones):
+def invertir_por_peticion(notificaciones, fuera_del_equipo):
     """Da vuelta la estructura por persona de los reportes de cada sector
     ({persona: {tipo: {clave: [tareas]}}}) a una por petición:
-    {issue_id: {tipo, clave, empresa, asunto, equipo: [(rol, persona_id)]}}."""
+    {issue_id: {tipo, clave, empresa, asunto, equipo: [(rol, persona_id)]}}.
+    Sólo quedan las peticiones en las que interviene al menos una persona a
+    cargo del R2 (que no esté en fuera_del_equipo)."""
     por_peticion = {}
     for persona_id, por_tipo in notificaciones.items():
         for tipo, grupos in por_tipo.items():
@@ -111,7 +128,12 @@ def invertir_por_peticion(notificaciones):
                         "asunto": t["asunto"], "equipo": [],
                     })
                     entrada["equipo"].append((t["rol"], persona_id))
-    return por_peticion
+    return {iid: p for iid, p in por_peticion.items()
+            if any(persona_id not in fuera_del_equipo for _, persona_id in p["equipo"])}
+
+def solo_equipo(notificaciones, fuera_del_equipo):
+    """Las notificaciones por persona, sin las personas que no están a cargo del R2."""
+    return {p: datos for p, datos in notificaciones.items() if p not in fuera_del_equipo}
 
 # ==========================================
 # IMPUESTOS
@@ -136,33 +158,14 @@ def sin_responsables_impuestos(issues, hoy):
             res.append(issue)
     return res
 
-def vencidas_pendientes_impuestos(issues, hoy):
-    """Peticiones de impuestos con vencimiento ya pasado que siguen en Pendiente.
-    Se resumen agrupadas por tipo y período (no una fila por petición): suelen ser
-    lotes enteros que ya se presentaron y falta cerrar en Redmine.
-    Devuelve: {(tipo, periodo): Counter({responsable_id: cantidad})}"""
-    grupos = {}
-    for issue in issues:
-        tipo = issue.get("tracker", {}).get("name", "")
-        proyecto = issue.get("project", {}).get("name", "")
-        if tipo not in imp.REGLAS_NOTIFICACION or "IMPUESTOS" not in proyecto.upper() or issue.get("status", {}).get("name") != "Pendiente":
-            continue
-        campos = campos_de(issue)
-        try:
-            venc = datetime.strptime(campos.get("VENCIMIENTO DD. JJ.", ""), "%Y-%m-%d").date()
-        except ValueError:
-            continue
-        if venc >= hoy:
-            continue
-        periodo = next((v for k, v in campos.items() if ("PERÍODO" in k or "PERIODO" in k) and v), "")
-        responsable = campos.get("RESPONSABLE") or "sin asignar"
-        grupos.setdefault((tipo, periodo), Counter())[responsable] += 1
-    return grupos
-
 def armar_resumen_impuestos(issues, users_map, hoy, redmine_url):
-    """Devuelve (cuerpo_html, cantidad_de_peticiones) o (None, 0) si hoy no hay nada que resumir."""
+    """Devuelve (cuerpo_html, cantidad_de_peticiones) o (None, 0) si hoy no hay nada que resumir.
+    Sólo entra lo que hoy les llegó a los empleados (vencimiento en 2 días hábiles):
+    peticiones viejas que quedaron abiertas (ej. de julio, estando en octubre) nunca
+    aparecen, porque su fecha de aviso ya pasó."""
+    fuera = FUERA_DEL_EQUIPO_R2["impuestos"]
     notificaciones = imp.process_redmine_data(issues, hoy)
-    por_peticion = invertir_por_peticion(notificaciones)
+    por_peticion = invertir_por_peticion(notificaciones, fuera)
     sin_resp = sin_responsables_impuestos(issues, hoy)
     if not por_peticion and not sin_resp:
         return None, 0
@@ -170,7 +173,7 @@ def armar_resumen_impuestos(issues, users_map, hoy, redmine_url):
     issues_por_id = {i.get("id"): i for i in issues}
     orden_tipos = list(imp.REGLAS_NOTIFICACION.keys())
 
-    html = tabla_carga_por_persona(notificaciones, users_map, orden_tipos)
+    html = tabla_carga_por_persona(solo_equipo(notificaciones, fuera), users_map, orden_tipos)
 
     tipos = sorted({p["tipo"] for p in por_peticion.values()}, key=orden_tipos.index)
     for tipo in tipos:
@@ -209,20 +212,6 @@ def armar_resumen_impuestos(issues, users_map, hoy, redmine_url):
             ])
         html += tabla(["#", "Empresa", "Tipo", "Vencimiento"], filas)
 
-    vencidas = vencidas_pendientes_impuestos(issues, hoy)
-    if vencidas:
-        total = sum(sum(c.values()) for c in vencidas.values())
-        html += seccion_alerta(f"Vencidas que siguen en Pendiente ({total})")
-        html += ('<p style="margin: 0 0 8px 0; font-size: 12px; color: #777777;">Peticiones con vencimiento ya pasado '
-                 'que siguen abiertas. Puede que ya estén presentadas y sólo falte cerrarlas en Redmine.</p>')
-        filas = []
-        for (tipo, periodo), por_resp in sorted(vencidas.items(), key=lambda x: (orden_tipos.index(x[0][0]), x[0][1])):
-            detalle = ", ".join(
-                f"{nombre_legible(users_map, r) if r != 'sin asignar' else 'sin asignar'} ({n})"
-                for r, n in por_resp.most_common())
-            filas.append([tipo, periodo, str(sum(por_resp.values())), detalle])
-        html += tabla(["Tipo", "Período", "Cantidad", "Por responsable"], filas)
-
     return html, len(por_peticion) + len(sin_resp)
 
 def etapa_legible(subestado):
@@ -244,14 +233,15 @@ def es_dia_de_envio_auditoria(hoy):
 
 def armar_resumen_auditoria(issues, users_map, hoy, redmine_url):
     """Devuelve (cuerpo_html, cantidad_de_peticiones) o (None, 0) si no hay nada que resumir."""
+    fuera = FUERA_DEL_EQUIPO_R2["auditoria"]
     notificaciones = aud.process_redmine_auditoria(issues, hoy)
-    por_peticion = invertir_por_peticion(notificaciones)
+    por_peticion = invertir_por_peticion(notificaciones, fuera)
     if not por_peticion:
         return None, 0
 
     orden_tipos = aud.TRACKERS_AUDITORIA
     orden_roles = list(aud.ROLES_AUDITORIA.values())
-    html = tabla_carga_por_persona(notificaciones, users_map, orden_tipos)
+    html = tabla_carga_por_persona(solo_equipo(notificaciones, fuera), users_map, orden_tipos)
 
     tipos = sorted({p["tipo"] for p in por_peticion.values()}, key=orden_tipos.index)
     for tipo in tipos:
