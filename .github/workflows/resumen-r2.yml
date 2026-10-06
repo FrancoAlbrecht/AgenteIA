@@ -1,0 +1,47 @@
+name: Resumen R2 por Sector
+
+on:
+  schedule:
+    # Mismo esquema que reporte-vencimientos.yml: GitHub retrasa los "schedule"
+    # varias horas en este repo, así que se dispara de madrugada (en un minuto
+    # que no sea en punto) y hay dos disparos de respaldo. main_resumen_r2.py
+    # chequea si ya hubo un envío exitoso hoy y, si lo hay, no manda nada.
+    # No adelantarlo antes de las 03:00 UTC: el script toma la fecha en UTC.
+    - cron: '31 6 * * *'   # dispara a las 03:31 ART
+    - cron: '18 10 * * *'  # respaldo 1: ~07:18 ART
+    - cron: '44 13 * * *'  # respaldo 2: ~10:44 ART
+  workflow_dispatch:        # permite disparo manual desde la pestaña Actions, para pruebas
+
+permissions:
+  contents: read
+  actions: read  # para que el script chequee corridas previas del día (ver ya_hubo_envio_exitoso_hoy)
+
+jobs:
+  enviar-resumen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Ejecutar resumen R2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REDMINE_URL: ${{ secrets.REDMINE_URL }}
+          REDMINE_API_KEY: ${{ secrets.REDMINE_API_KEY }}
+          SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          GMAIL_OAUTH_CLIENT_ID: ${{ secrets.GMAIL_OAUTH_CLIENT_ID }}
+          GMAIL_OAUTH_CLIENT_SECRET: ${{ secrets.GMAIL_OAUTH_CLIENT_SECRET }}
+          GMAIL_OAUTH_REFRESH_TOKEN: ${{ secrets.GMAIL_OAUTH_REFRESH_TOKEN }}
+          SMTP_FROM_EMAIL: ${{ secrets.SMTP_FROM_EMAIL }}
+        run: python main_resumen_r2.py
