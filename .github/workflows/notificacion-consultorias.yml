@@ -1,0 +1,51 @@
+name: Notificación de Consultorías
+
+on:
+  schedule:
+    # Cada 30 minutos (en minutos que no sean en punto), de lunes a viernes de
+    # 07:17 a 19:47 ART (10 a 22 UTC). Lo que se cargue de noche o el fin de
+    # semana se avisa en la primera corrida del día hábil siguiente: cada
+    # corrida revisa desde la última exitosa, así que no se pierde nada aunque
+    # GitHub saltee o atrase disparos.
+    - cron: '17,47 10-22 * * 1-5'
+  workflow_dispatch:        # permite disparo manual desde la pestaña Actions, para pruebas
+
+# Nunca dos corridas a la vez: la segunda espera a que termine la primera, así
+# la ventana de tiempo que revisa cada una no se superpone.
+concurrency:
+  group: notificacion-consultorias
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read  # para calcular la ventana desde la última corrida exitosa (ver calcular_ventana)
+
+jobs:
+  notificar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Ejecutar notificación de consultorías
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REDMINE_URL: ${{ secrets.REDMINE_URL }}
+          REDMINE_API_KEY: ${{ secrets.REDMINE_API_KEY }}
+          SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          GMAIL_OAUTH_CLIENT_ID: ${{ secrets.GMAIL_OAUTH_CLIENT_ID }}
+          GMAIL_OAUTH_CLIENT_SECRET: ${{ secrets.GMAIL_OAUTH_CLIENT_SECRET }}
+          GMAIL_OAUTH_REFRESH_TOKEN: ${{ secrets.GMAIL_OAUTH_REFRESH_TOKEN }}
+          SMTP_FROM_EMAIL: ${{ secrets.SMTP_FROM_EMAIL }}
+        run: python main_consultorias.py
