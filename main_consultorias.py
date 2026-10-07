@@ -451,6 +451,40 @@ def armar_plantilla(cuerpo_html):
 </body>
 </html>"""
 
+MAX_CARACTERES_ASUNTO_CONSULTA = 80
+
+def _nombre_corto_cliente(issue):
+    """'CAGLIERIS FEDERICO' -> 'Caglieris': el proyecto raíz se llama APELLIDO NOMBRE."""
+    cliente = (issue.get("_cliente") or issue.get("project", {}).get("name", "")).strip()
+    return cliente.split()[0].title() if cliente else "Consultoría"
+
+def asunto_del_aviso(items):
+    """Título del correo: cliente(s), si son nuevas o actualizadas, y el asunto de
+    la primera consulta (las nuevas primero), p. ej.
+      [Consultoría] Caglieris – Nueva consulta: Liquidación de ganancias 2025
+      [Consultoría] Caglieris, Saires – 1 nueva y 1 actualizada: Liquidación de ganancias 2025 y 1 más"""
+    es_nueva = lambda eventos: any(e["tipo"] == "nueva" for e in eventos)
+    ordenados = sorted(items, key=lambda it: not es_nueva(it[2]))
+    clientes = list(dict.fromkeys(_nombre_corto_cliente(issue) for issue, _, _ in ordenados))
+
+    nuevas = sum(1 for _, _, eventos in ordenados if es_nueva(eventos))
+    actualizadas = len(ordenados) - nuevas
+    if len(ordenados) == 1:
+        que = "Nueva consulta" if nuevas else "Consulta actualizada"
+    elif not actualizadas:
+        que = f"{nuevas} consultas nuevas"
+    elif not nuevas:
+        que = f"{actualizadas} consultas actualizadas"
+    else:
+        que = (f"{nuevas} nueva{'s' if nuevas > 1 else ''} y "
+               f"{actualizadas} actualizada{'s' if actualizadas > 1 else ''}")
+
+    primer_asunto = (ordenados[0][0].get("subject") or "").strip() or f"#{ordenados[0][0]['id']}"
+    if len(primer_asunto) > MAX_CARACTERES_ASUNTO_CONSULTA:
+        primer_asunto = primer_asunto[:MAX_CARACTERES_ASUNTO_CONSULTA - 1].rstrip() + "…"
+    resto = f" y {len(ordenados) - 1} más" if len(ordenados) > 1 else ""
+    return f"[Consultoría] {', '.join(clientes)} – {que}: {primer_asunto}{resto}"
+
 def preparar_correos(avisos, redmine, users_map, redmine_url):
     """[(persona_id, nombre_real, correo_destino, etiqueta, asunto, html, ids_peticiones)]"""
     correos = []
@@ -461,12 +495,7 @@ def preparar_correos(avisos, redmine, users_map, redmine_url):
             destino, etiqueta = CORREO_ADMIN_CONSULTORIAS, "[REDIRIGIDO A ADMIN]"
         else:
             destino, etiqueta = correo_real, "[PRODUCCIÓN]"
-        if len(items) == 1:
-            issue, _, eventos = items[0]
-            prefijo = "Nueva consulta" if any(e["tipo"] == "nueva" for e in eventos) else "Novedades en la consulta"
-            asunto = f"[Consultoría] {prefijo} #{issue['id']}: {issue.get('subject', '')}"
-        else:
-            asunto = f"[Consultoría] {len(items)} consultas con novedades"
+        asunto = asunto_del_aviso(items)
         html_correo = armar_html_persona(nombre_real, items, redmine, users_map, redmine_url)
         correos.append((persona_id, nombre_real, destino, etiqueta, asunto, html_correo, [i["id"] for i, _, _ in items]))
     return correos
