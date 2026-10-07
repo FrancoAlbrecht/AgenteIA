@@ -12,6 +12,8 @@ Automatizaciones que leen Redmine y mandan avisos por correo. Cinco scripts (lab
 
 **Ojo con los horarios:** GitHub atrasa los "schedule" de este repo 6 a 9 horas (medido el 06/10/2026: el disparo de 03:24 ART de impuestos sale ~10-12 ART). No adelantar ningún cron antes de las 03:00 UTC (00:00 ART): los scripts toman la fecha en UTC y mandarían el reporte del día siguiente.
 
+**Disparo externo con cron-job.org (desde el 07/10/2026):** para no depender del atraso de GitHub, la cuenta de cron-job.org del usuario dispara por API (`workflow_dispatch`, que sale sin atraso) impuestos a las 06:30 ART y el resumen R2 a las 06:35 ART (zona `America/Argentina/Buenos_Aires` en cada job). Usan un token fine-grained de GitHub (`cron-job-agenteia`, sólo "Actions: read/write" sobre este repo, sin vencimiento). Los crons de GitHub quedan como respaldo: `ya_hubo_envio_exitoso_hoy()` cuenta cualquier corrida exitosa del día, así que no se duplica nada. Si cron-job.org falla, avisa por mail al usuario.
+
 ## Resumen R2 (`main_resumen_r2.py`) — desde el 06/10/2026
 
 Un único correo por sector para su R2, que unifica lo que ese día les llegó a las personas a su cargo: cada petición aparece una sola vez (fila de tabla con todo el equipo y la etapa), más las peticiones que no le llegaron a nadie por no tener responsables. Reutiliza `process_redmine_data` / `process_redmine_auditoria` importando los otros scripts (sin modificarlos).
@@ -80,7 +82,7 @@ Al 28/09/2026 no había ninguna petición abierta de los trackers SICORE / SIRAD
 1. **Las 36 domésticas no tienen Liquidador 1 / Control 1 / Soporte 1 asignado** → hoy no le llegaría el aviso a nadie (sólo aparecen en el resumen de ejecución). ¿Las asignan en Redmine o va a una persona fija?
 2. **931 sin responsables:** WILSON S.A (#187526), GLUBITS S.A (#187523), ETMA S.A. (#187520).
 3. **15 peticiones 931 sin vencimiento cargado** (períodos 10, 11 y 12/2026) — probablemente normal (todavía no cargadas), no se avisan hasta que tengan fecha.
-4. **Workflow de GitHub Actions para laboral:** no existe. Crearlo cuando el reporte esté validado (ojo: el `gh` local no tiene scope `workflow`, puede que haya que crearlo desde la web de GitHub o el usuario pushearlo con otro token). Conviene replicar los disparos de respaldo + `ya_hubo_envio_exitoso_hoy()` de impuestos.
+4. **Workflow de GitHub Actions para laboral:** no existe. Crearlo cuando el reporte esté validado (el `gh` local tiene scope `workflow` desde el 07/10/2026, se puede pushear directo). Conviene replicar los disparos de respaldo + `ya_hubo_envio_exitoso_hoy()` de impuestos.
 
 **Resultado de la vista previa (28/09/2026):** 08/10 → 3 correos (Tschieder, Gallino, Tosello; vence 13/10 con el 12/10 feriado); 09/10 → 3 correos (Villagra, Gallino, Tosello); 30/09 → 0 correos (domésticas sin responsables).
 
@@ -91,7 +93,7 @@ Al 28/09/2026 no había ninguna petición abierta de los trackers SICORE / SIRAD
 - **Auditoría en producción desde el 24/09/2026** (`REDIRIGIR_A_ADMIN_AUDITORIA = False`): ese día hubo un envío puntual fuera de corte (`FECHAS_ENVIO_EXTRA`); a partir de ahí sale todos los 21, aunque caiga fin de semana o feriado. El envío del 21/09 fue todavía en modo prueba (todo a admin).
 - **Ventana del reporte de auditoría (desde el 25/09/2026):** trae lo que vence desde el día del envío hasta el **último día del mes siguiente** (pedido del sector auditoría: antes llegaba sólo hasta el 21 del mes siguiente y los cierres de fin de mes quedaban afuera). Lo que vence entre el 21 y fin de mes sale en dos reportes seguidos, a propósito.
 - **Auditoría no filtra por proyecto:** entran todas las peticiones CyA Balance/Corte/Auditoria en Pendiente, estén o no en el subproyecto de Auditoría. Las que están mal ubicadas se listan en el correo de resumen (`detectar_fuera_de_proyecto_auditoria`) para moverlas en Redmine.
-- **Envío manual de auditoría fuera del 21:** correr localmente `FORZAR_ENVIO_AUDITORIA=1 python main_auditoria.py` (usa el `.env`). Manda a todos, y la corrida automática del día no duplica porque no fuerza. Se usó el 25/09/2026 para mandar el reporte completo con la ventana nueva. (No se pudo agregar como opción del workflow: el `gh` local no tiene scope `workflow` para pushear cambios en `.github/workflows/`.)
+- **Envío manual de auditoría fuera del 21:** correr localmente `FORZAR_ENVIO_AUDITORIA=1 python main_auditoria.py` (usa el `.env`). Manda a todos, y la corrida automática del día no duplica porque no fuerza. Se usó el 25/09/2026 para mandar el reporte completo con la ventana nueva. (Ahora que el `gh` local tiene scope `workflow`, se podría agregar como opción del workflow.)
 
 ## Historial reciente (sesión del 15/09/2026)
 
