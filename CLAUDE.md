@@ -24,7 +24,7 @@ Un único correo por sector para su R2, que unifica lo que ese día les llegó a
 ## Consultorías (`main_consultorias.py`) — EN PRODUCCIÓN desde el 06/10/2026
 
 Los clientes de consultoría (proyectos `federicocaglieris` y `evelynsaires` en `PROYECTOS_CONSULTORIA`, con sus subproyectos) cargan consultas en Redmine y Redmine no avisa. Cada corrida revisa lo creado/editado desde el inicio de la última corrida exitosa del workflow (vía API de GitHub), así que no se pierde nada aunque GitHub saltee disparos.
-- Destinatarios: el asignado (ej. Patricio Pogonza); si está asignada al grupo `CONSULTORIA X` o sin asignar, los miembros del grupo (Borgogno, Boretto, Mihlager).
+- Destinatarios: el asignado (ej. Patricio Pogonza); si está asignada al grupo `CONSULTORIA X` o sin asignar, los miembros del grupo en Redmine (`CONSULTORIA SAIRES`, id 1235: Borgogno, Boretto, Mihlager y, desde el 07/10/2026, Pogonza). Para cambiar quién recibe, editar el grupo en Redmine, no el código.
 - Nunca avisa a alguien de su propia acción ni a casillas que no sean `@rivarossa.com` (los clientes nunca reciben nada).
 - El repo es público: el log sólo imprime números de petición, nunca el contenido de las consultas.
 - Disparo: cron-job.org cada 30 min en horario laboral (ver "Disparo externo"), con el schedule de GitHub de respaldo. `concurrency` en el workflow evita que dos corridas se superpongan y dupliquen avisos.
