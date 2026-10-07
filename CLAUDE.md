@@ -12,7 +12,7 @@ Automatizaciones que leen Redmine y mandan avisos por correo. Cinco scripts (lab
 
 **Ojo con los horarios:** GitHub atrasa los "schedule" de este repo 6 a 9 horas (medido el 06/10/2026: el disparo de 03:24 ART de impuestos sale ~10-12 ART). No adelantar ningún cron antes de las 03:00 UTC (00:00 ART): los scripts toman la fecha en UTC y mandarían el reporte del día siguiente.
 
-**Disparo externo con cron-job.org (desde el 07/10/2026):** para no depender del atraso de GitHub, la cuenta de cron-job.org del usuario dispara por API (`workflow_dispatch`, que sale sin atraso) impuestos a las 06:30 ART, el resumen R2 a las 06:35 ART y auditoría el día 21 a las 06:40 ART (zona `America/Argentina/Buenos_Aires` en cada job). Usan un token fine-grained de GitHub (`cron-job-agenteia`, sólo "Actions: read/write" sobre este repo, sin vencimiento). Los crons de GitHub quedan como respaldo: `ya_hubo_envio_exitoso_hoy()` (en impuestos, R2 y, desde el 07/10/2026, auditoría, donde sólo se consulta el día de envío) cuenta cualquier corrida exitosa del día, así que no se duplica nada. Si cron-job.org falla, avisa por mail al usuario.
+**Disparo externo con cron-job.org (desde el 07/10/2026):** para no depender del atraso de GitHub, la cuenta de cron-job.org del usuario dispara por API (`workflow_dispatch`, que sale sin atraso) impuestos a las 06:30 ART, el resumen R2 a las 06:35 ART auditoría el día 21 a las 06:40 ART y consultorías cada 30 min (`17,47 7-19 * * 1-5`) (zona `America/Argentina/Buenos_Aires` en cada job). Usan un token fine-grained de GitHub (`cron-job-agenteia`, sólo "Actions: read/write" sobre este repo, sin vencimiento). Los crons de GitHub quedan como respaldo: `ya_hubo_envio_exitoso_hoy()` (en impuestos, R2 y, desde el 07/10/2026, auditoría, donde sólo se consulta el día de envío) cuenta cualquier corrida exitosa del día, así que no se duplica nada. Si cron-job.org falla, avisa por mail al usuario.
 
 ## Resumen R2 (`main_resumen_r2.py`) — desde el 06/10/2026
 
@@ -27,6 +27,8 @@ Los clientes de consultoría (proyectos `federicocaglieris` y `evelynsaires` en 
 - Destinatarios: el asignado (ej. Patricio Pogonza); si está asignada al grupo `CONSULTORIA X` o sin asignar, los miembros del grupo (Borgogno, Boretto, Mihlager).
 - Nunca avisa a alguien de su propia acción ni a casillas que no sean `@rivarossa.com` (los clientes nunca reciben nada).
 - El repo es público: el log sólo imprime números de petición, nunca el contenido de las consultas.
+- Disparo: cron-job.org cada 30 min en horario laboral (ver "Disparo externo"), con el schedule de GitHub de respaldo. `concurrency` en el workflow evita que dos corridas se superpongan y dupliquen avisos.
+- Primera corrida en GitHub: 07/10/2026 (manual), avisó #192724 y #192723 a Borgogno, Boretto y Mihlager.
 - Prueba local: `SOLO_VISTA_PREVIA=1 VENTANA_DESDE=2026-10-01T00:00:00Z python main_consultorias.py`.
 
 `feriados.py` tiene el calendario de feriados/no laborables usado para calcular días hábiles en `main_impuestos.py` (auditoría ya no lo usa: manda siempre el 21).
