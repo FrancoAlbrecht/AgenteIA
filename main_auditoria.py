@@ -509,6 +509,31 @@ def enviar_resumen_ejecucion(estado, detalle_lineas, smtp_server, smtp_port, smt
         # error original ni romper el resto del cierre del script.
         print(f"[ERROR] No se pudo enviar el resumen de ejecución a {destino}: {e}")
 
+def ya_hubo_envio_exitoso_hoy():
+    """Mismo chequeo que main_impuestos.ya_hubo_envio_exitoso_hoy, pero sobre
+    reporte-auditoria.yml. El día de envío el workflow se dispara dos veces
+    (cron-job.org temprano y el "schedule" de GitHub, que llega horas tarde):
+    si ya hubo una corrida exitosa hoy, ésta no manda nada. Sólo se consulta
+    el día de envío, así que las corridas de los otros días (que terminan bien
+    sin mandar nada) no cuentan. Fuera de GitHub Actions se asume que no."""
+    repo = os.getenv("GITHUB_REPOSITORY")
+    token = os.getenv("GITHUB_TOKEN")
+    run_id_actual = os.getenv("GITHUB_RUN_ID")
+    if not repo or not token:
+        return False
+    try:
+        url_api = f"https://api.github.com/repos/{repo}/actions/workflows/reporte-auditoria.yml/runs"
+        headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github+json"}
+        hoy = datetime.now().date().isoformat()
+        resp = requests.get(url_api, headers=headers, timeout=10,
+                             params={"status": "success", "created": f">={hoy}", "per_page": 10})
+        resp.raise_for_status()
+        runs = resp.json().get("workflow_runs", [])
+        return any(str(r.get("id")) != str(run_id_actual) for r in runs)
+    except Exception as e:
+        print(f"[WARN] No se pudo chequear corridas previas de hoy ({e}); se continúa igual.")
+        return False
+
 if __name__ == "__main__":
     url = os.getenv("REDMINE_URL")
     redmine_key = os.getenv("REDMINE_API_KEY")
@@ -529,6 +554,8 @@ if __name__ == "__main__":
     if hoy != fecha_envio_mes_actual and hoy not in FECHAS_ENVIO_EXTRA and not forzar_envio:
         print(f"[INFO] Hoy ({hoy}) no es el día de envío del reporte mensual de auditoría "
               f"(corresponde el {fecha_envio_mes_actual}). No se envían correos.")
+    elif not forzar_envio and ya_hubo_envio_exitoso_hoy():
+        print("Ya hubo una ejecución exitosa hoy — se omite este disparo para no duplicar el reporte.")
     else:
         # Sólo en el día de envío (o al forzarlo) corremos con la misma red de
         # seguridad que main_impuestos.py: si algo falla, igual se manda un

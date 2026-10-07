@@ -14,6 +14,7 @@ on:
 
 permissions:
   contents: read
+  actions: read  # para que el script chequee corridas previas del día (ver ya_hubo_envio_exitoso_hoy)
 
 jobs:
   enviar-reporte:
@@ -33,6 +34,7 @@ jobs:
 
       - name: Ejecutar agente de auditoría
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REDMINE_URL: ${{ secrets.REDMINE_URL }}
           REDMINE_API_KEY: ${{ secrets.REDMINE_API_KEY }}
           SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
