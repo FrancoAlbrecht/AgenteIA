@@ -64,29 +64,25 @@ Tercer script, **independiente** de impuestos y auditoría (no importa nada de e
 - `SOLO_VISTA_PREVIA=1 FECHA_SIMULADA=2026-10-08 python main_laboral.py` → no manda nada, guarda los HTML en `vista_previa_laboral/` (en `.gitignore`) e imprime el resumen.
 - Sin `SOLO_VISTA_PREVIA` manda de verdad (todo a admin por el modo prueba). `FECHA_SIMULADA` sirve también ahí.
 
-**Destinatarios:** los trackers laborales usan `Liquidador 1`, `Control 1`, `Soporte 1` (no Auxiliar/Liquidador/Responsable como impuestos). Se avisa a los 3, un correo por persona con todos sus vencimientos (confirmado por el usuario).
+**Destinatarios:** el 931 usa `Liquidador 1`, `Control 1`, `Soporte 1`; los trackers nuevos (814, Provisión vacaciones, Asiento, SICORE) usan `Liquidador` y `Control` (sin "1"). Se avisa a todos los que figuren, un correo por persona con todos sus vencimientos. Las peticiones sin ningún responsable **se ignoran en silencio** (pedido del sector: el agente no las debe tomar).
 
-**Reglas definidas por el sector (Excel del usuario, 28/09/2026) y estado de cada una:**
+**Reglas** (Excel del usuario 28/09/2026 + respuestas de Diego, responsable de laboral, 07/10/2026):
 
 | Petición | Tracker en Redmine | Cuándo llega el aviso | Estado |
 |---|---|---|---|
-| Leyes sociales | `Laboral - Formulario 931` con asunto "Leyes Sociales" | 2 días hábiles antes del `Vencimiento DD. JJ.` | ✅ Hecho |
-| Domésticas | `Laboral - Doméstica` (asunto "Domestica"/"Doméstica") | Último día hábil del mes; se avisa lo que vence en el mes siguiente (interpretación mía, validar con el usuario) | ✅ Hecho |
-| 814 | `Laboral - 814` | Día hábil siguiente al vencimiento del **931** (el 814 no tiene vencimiento propio: tomar el `Vencimiento DD. JJ.` del 931 de la misma empresa y período — confirmado por el usuario) | ⏳ Próximo a hacer |
-| SICORE | `Laboral - SICORE` | 4° día hábil del mes | ⏳ Pendiente |
-| SIRADIG | `Laboral - SIRADIG` | El 20 de cada mes o el día hábil siguiente | ⏳ Pendiente |
-| Asiento de sueldos | `Laboral - Asiento sueldo` | Wiltel: 2° día hábil del mes. Cortassa: después del vencimiento del 931 (el usuario anotó "VER — ¿usamos la fecha de presentación?": definir con él) | ⏳ Pendiente, regla a definir |
-| Provisión vacaciones | (tracker a confirmar) | Según fecha asignada en el tablero (definir qué campo) | ⏳ Pendiente, regla a definir |
+| Leyes sociales | `Laboral - Formulario 931` con asunto "Leyes Sociales" | 2 días hábiles antes del `Vencimiento DD. JJ.` (se carga ~23/24 del mes anterior) | ✅ Hecho |
+| 814 | `Laboral - 814` | Día hábil siguiente al `Vencimiento DD. JJ.` del 931 (Leyes Sociales) del **mismo proyecto y período**, buscado también entre 931 cerrados (`fetch_vencimientos_931`) | ✅ Hecho (al 07/10 los 2 abiertos no tienen responsables) |
+| Provisión vacaciones | `Laboral - Provision vacaciones` | 3 días hábiles antes del campo `Fecha límite` | ✅ Hecho (al 07/10 las 29 están cerradas y sin fecha: Diego las edita) |
+| Domésticas | `Laboral - Doméstica` | **Sacado** (Diego: "SACARLO"; el usuario lo interpretó como sacarlas del todo) | ❌ No se avisa |
+| SICORE | `Laboral - SICORE` | 4° día hábil del mes | ⏸ En pausa: el sector les carga responsables, las abre y avisa |
+| SIRADIG | `Laboral - SIRADIG` | El 20 de cada mes o el día hábil siguiente | ⏸ En pausa (ídem) |
+| Asiento de sueldos | `Laboral - Asiento sueldo` | Wiltel: 2° día hábil del mes. Cortassa: 2 días hábiles antes de `Fecha Presentación:` (Diego ya la cargó) | ⏸ En pausa (ídem) |
 
-Al 28/09/2026 no había ninguna petición abierta de los trackers SICORE / SIRADIG / Asiento sueldo (y sólo 2 de `Laboral - 814`, período 08/2026, con campos `Control`, `Liquidador`, `Fecha Presentación:` sin "1" en el nombre). Revisar en Redmine qué campos tienen esos trackers antes de programarlos.
+**Pendientes:**
+1. **Workflow de GitHub Actions para laboral:** no existe. Crearlo cuando el reporte esté validado. Replicar disparos de respaldo + `ya_hubo_envio_exitoso_hoy()` de impuestos (y sumar un cronjob en cron-job.org).
+2. Cuando el sector avise que abrió SICORE / SIRADIG / Asiento, programarlos (campos `Período`, `Liquidador`, `Control`, `Fecha Presentación:`).
 
-**Pendientes a resolver con el usuario / sector laboral:**
-1. **Las 36 domésticas no tienen Liquidador 1 / Control 1 / Soporte 1 asignado** → hoy no le llegaría el aviso a nadie (sólo aparecen en el resumen de ejecución). ¿Las asignan en Redmine o va a una persona fija?
-2. **931 sin responsables:** WILSON S.A (#187526), GLUBITS S.A (#187523), ETMA S.A. (#187520).
-3. **15 peticiones 931 sin vencimiento cargado** (períodos 10, 11 y 12/2026) — probablemente normal (todavía no cargadas), no se avisan hasta que tengan fecha.
-4. **Workflow de GitHub Actions para laboral:** no existe. Crearlo cuando el reporte esté validado (el `gh` local tiene scope `workflow` desde el 07/10/2026, se puede pushear directo). Conviene replicar los disparos de respaldo + `ya_hubo_envio_exitoso_hoy()` de impuestos.
-
-**Resultado de la vista previa (28/09/2026):** 08/10 → 3 correos (Tschieder, Gallino, Tosello; vence 13/10 con el 12/10 feriado); 09/10 → 3 correos (Villagra, Gallino, Tosello); 30/09 → 0 correos (domésticas sin responsables).
+**Vista previa (07/10/2026):** 08/10 y 09/10 → 8 correos cada día (el sector asignó más 931 desde el 28/09; la versión anterior del script da lo mismo).
 
 ## Pendientes / cosas a tener en cuenta
 
