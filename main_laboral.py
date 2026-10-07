@@ -3,7 +3,7 @@ import unicodedata
 import requests
 import smtplib
 import base64
-from datetime import datetime, date, timedelta
+from datetime import datetime, timedelta
 from email.message import EmailMessage
 from dotenv import load_dotenv
 from feriados import FERIADOS
@@ -64,20 +64,35 @@ IDS_EXCLUIDOS = {
     "792",  # Caravario, Darién - ya no es empleado (2026-09)
 }
 
-# Campos de rol de las peticiones laborales (distintos a los de impuestos).
-CAMPOS_ROL = {"LIQUIDADOR 1": "Liquidador", "CONTROL 1": "Control", "SOPORTE 1": "Soporte"}
+# Campos de rol de las peticiones laborales (distintos a los de impuestos), con el
+# nombre normalizado (ver _normalizar_texto). El 931 usa "Liquidador 1"/"Control 1"/
+# "Soporte 1"; los trackers nuevos (814, vacaciones, asiento, SICORE) "Liquidador"/"Control".
+CAMPOS_ROL = {
+    "liquidador 1": "Liquidador", "control 1": "Control", "soporte 1": "Soporte",
+    "liquidador": "Liquidador", "control": "Control",
+}
+
+TRACKER_931 = "Laboral - Formulario 931"
 
 # Motor de reglas: cada tracker define cuándo se dispara su aviso. El orden del
 # diccionario es el orden de los bloques en el correo.
-#  - "dias_habiles_antes": N días hábiles antes del "Vencimiento DD. JJ." de la petición.
-#  - "ultimo_habil_del_mes": el último día hábil de cada mes se avisa lo que vence
-#    durante el mes siguiente.
+#  - "dias_habiles_antes": N días hábiles antes de la fecha del campo "campo_fecha".
+#  - "habil_despues_del_931": N días hábiles después del "Vencimiento DD. JJ." del
+#    931 (Leyes Sociales) de la misma empresa y período; el 814 no tiene fecha propia.
 # "asunto" (opcional) exige además que el asunto de la petición lo contenga.
-# Pendientes de agregar: Laboral - 814, SICORE, SIRADIG, Asiento sueldo, Provisión vacaciones.
+# "etiqueta_fecha" es cómo se nombra esa fecha en el correo.
+# Domésticas se sacó a pedido del sector (respuesta de Diego, 07/10/2026).
+# Pendientes: SICORE, SIRADIG y Asiento sueldo esperan a que el sector abra las
+# peticiones y les cargue responsables (Asiento de Cortassa: 2 días hábiles antes
+# de la "Fecha Presentación:").
 REGLAS_LABORAL = {
-    "Laboral - Formulario 931": {"regla": "dias_habiles_antes", "dias": 2,
-                                 "asunto": "leyes sociales", "titulo": "Leyes Sociales (F.931)"},
-    "Laboral - Doméstica": {"regla": "ultimo_habil_del_mes", "titulo": "Domésticas"},
+    TRACKER_931: {"regla": "dias_habiles_antes", "dias": 2, "campo_fecha": "Vencimiento DD. JJ.",
+                  "asunto": "leyes sociales", "titulo": "Leyes Sociales (F.931)",
+                  "etiqueta_fecha": "Vencimiento"},
+    "Laboral - 814": {"regla": "habil_despues_del_931", "dias": 1, "titulo": "Decreto 814",
+                      "etiqueta_fecha": "Vencimiento del F.931"},
+    "Laboral - Provision vacaciones": {"regla": "dias_habiles_antes", "dias": 3, "campo_fecha": "Fecha límite",
+                                       "titulo": "Provisión de vacaciones", "etiqueta_fecha": "Fecha límite"},
 }
 
 USUARIOS_FALLBACK = {
@@ -115,14 +130,14 @@ def restar_dias_habiles(fecha, dias_habiles):
             restantes -= 1
     return actual
 
-def mes_siguiente(anio, mes):
-    return (anio + 1, 1) if mes == 12 else (anio, mes + 1)
-
-def ultimo_dia_habil_del_mes(anio, mes):
-    anio_sig, mes_sig = mes_siguiente(anio, mes)
-    actual = date(anio_sig, mes_sig, 1) - timedelta(days=1)
-    while not es_dia_habil(actual):
-        actual -= timedelta(days=1)
+def sumar_dias_habiles(fecha, dias_habiles):
+    """Suma N días hábiles (lunes a viernes, excluyendo feriados) a una fecha."""
+    actual = fecha
+    restantes = dias_habiles
+    while restantes > 0:
+        actual += timedelta(days=1)
+        if es_dia_habil(actual):
+            restantes -= 1
     return actual
 
 def _parsear_fecha(fecha_str):
@@ -131,15 +146,64 @@ def _parsear_fecha(fecha_str):
     except (ValueError, TypeError):
         return None
 
-def corresponde_avisar(config, fecha_venc, hoy):
-    """Decide si una petición con vencimiento fecha_venc se avisa hoy según la regla de su tracker."""
+def corresponde_avisar(config, fecha_ref, hoy):
+    """Decide si una petición con fecha de referencia fecha_ref se avisa hoy según la regla de su tracker."""
     if config["regla"] == "dias_habiles_antes":
-        return restar_dias_habiles(fecha_venc, config["dias"]) == hoy
-    if config["regla"] == "ultimo_habil_del_mes":
-        if hoy != ultimo_dia_habil_del_mes(hoy.year, hoy.month):
-            return False
-        return (fecha_venc.year, fecha_venc.month) == mes_siguiente(hoy.year, hoy.month)
+        return restar_dias_habiles(fecha_ref, config["dias"]) == hoy
+    if config["regla"] == "habil_despues_del_931":
+        return sumar_dias_habiles(fecha_ref, config["dias"]) == hoy
     return False
+
+def _campos(issue):
+    """{nombre normalizado: valor} de los campos personalizados con valor."""
+    campos = {}
+    for c in issue.get("custom_fields", []):
+        valor = c.get("value")
+        if valor not in (None, ""):
+            campos[_normalizar_texto(c.get("name", ""))] = str(valor).strip()
+    return campos
+
+def _periodo(campos):
+    return next((v for k, v in campos.items() if "periodo" in k), "")
+
+def fetch_vencimientos_931(session, redmine_url, api_key, issues):
+    """{(proyecto_id, período): "Vencimiento DD. JJ."} del 931 (Leyes Sociales) de cada
+    proyecto que tiene un 814 pendiente. Busca también entre los 931 cerrados: para
+    cuando toca avisar el 814, el 931 de ese período normalmente ya está terminado."""
+    regla_814 = [t for t, c in REGLAS_LABORAL.items() if c["regla"] == "habil_despues_del_931"]
+    proyectos = {i["project"]["id"] for i in issues
+                 if REGLAS_NORMALIZADAS.get(_normalizar_texto(i.get("tracker", {}).get("name", ""))) in regla_814
+                 and i.get("status", {}).get("name", "") == "Pendiente"}
+    if not proyectos:
+        return {}
+
+    headers = {"X-Redmine-API-Key": api_key}
+    trackers = session.get(f"{redmine_url}trackers.json", headers=headers, timeout=20)
+    trackers.raise_for_status()
+    tracker_931_id = next(t["id"] for t in trackers.json()["trackers"]
+                          if _normalizar_texto(t["name"]) == _normalizar_texto(TRACKER_931))
+    asunto_931 = REGLAS_LABORAL[TRACKER_931].get("asunto", "")
+    campo_venc = _normalizar_texto(REGLAS_LABORAL[TRACKER_931]["campo_fecha"])
+
+    vencimientos = {}
+    for proyecto_id in proyectos:
+        offset = 0
+        while True:
+            response = session.get(f"{redmine_url}issues.json", headers=headers, timeout=20, params={
+                "project_id": proyecto_id, "tracker_id": tracker_931_id, "status_id": "*",
+                "limit": 100, "offset": offset})
+            response.raise_for_status()
+            data = response.json().get("issues", [])
+            if not data:
+                break
+            for i in data:
+                if asunto_931 and asunto_931 not in _normalizar_texto(i.get("subject", "")):
+                    continue
+                campos = _campos(i)
+                if campos.get(campo_venc):
+                    vencimientos[(i["project"]["id"], _periodo(campos))] = campos[campo_venc]
+            offset += 100
+    return vencimientos
 
 def fetch_redmine_users(session, redmine_url, api_key):
     """Obtiene la lista de usuarios de Redmine para traducir el ID al Nombre real"""
@@ -191,13 +255,15 @@ def fetch_redmine_issues(session, redmine_url, api_key):
     print(f"[OK] Peticiones descargadas: {len(all_issues)} en total.")
     return all_issues
 
-def process_redmine_laboral(issues, hoy):
+def process_redmine_laboral(issues, hoy, vencimientos_931):
     """Filtra las peticiones laborales en estado Pendiente que corresponde avisar hoy
-    según REGLAS_LABORAL y las agrupa por persona.
-    Devuelve: ({ persona_id: { tracker: { (periodo, vencimiento): [tareas] } } },
-               [peticiones que tocaban hoy pero no tienen a nadie asignado])"""
+    según REGLAS_LABORAL y las agrupa por persona. vencimientos_931 es lo que
+    devuelve fetch_vencimientos_931 (para la regla del 814).
+    Las que no tienen Liquidador/Control/Soporte asignado se ignoran: el sector
+    pidió que el agente no las tome (respuesta de Diego, 07/10/2026).
+    Devuelve: { persona_id: { tracker: { (periodo, fecha de referencia): [tareas] } } }"""
     notificaciones = {}
-    sin_responsables = []
+    sin_responsables = 0
     descartadas_sin_fecha = 0
 
     for issue in issues:
@@ -209,46 +275,41 @@ def process_redmine_laboral(issues, hoy):
         if config.get("asunto") and config["asunto"] not in _normalizar_texto(asunto):
             continue
 
-        fecha_vencimiento = ""
-        periodo = ""
+        campos = _campos(issue)
+        periodo = _periodo(campos)
         roles_involucrados = {}
-        for c in issue.get("custom_fields", []):
-            nombre = c.get("name", "").strip().upper()
-            valor_raw = c.get("value")
-            valor = str(valor_raw).strip() if valor_raw not in (None, "") else ""
-            if not valor:
-                continue
-            if nombre == "VENCIMIENTO DD. JJ.":
-                fecha_vencimiento = valor
-            elif "PERÍODO" in nombre or "PERIODO" in nombre:
-                periodo = valor
-            elif nombre in CAMPOS_ROL and valor not in IDS_EXCLUIDOS:
+        for nombre, valor in campos.items():
+            if nombre in CAMPOS_ROL and valor not in IDS_EXCLUIDOS:
                 # Una misma persona puede figurar en más de un rol de la misma petición.
                 roles_involucrados.setdefault(valor, []).append(CAMPOS_ROL[nombre])
 
-        fecha_venc = _parsear_fecha(fecha_vencimiento)
-        if fecha_venc is None:
+        if config["regla"] == "habil_despues_del_931":
+            fecha_ref_raw = vencimientos_931.get((issue["project"]["id"], periodo), "")
+        else:
+            fecha_ref_raw = campos.get(_normalizar_texto(config["campo_fecha"]), "")
+        fecha_ref = _parsear_fecha(fecha_ref_raw)
+        if fecha_ref is None:
             descartadas_sin_fecha += 1
             continue
-        if not corresponde_avisar(config, fecha_venc, hoy):
+        if not corresponde_avisar(config, fecha_ref, hoy):
+            continue
+
+        if not roles_involucrados:
+            sin_responsables += 1
             continue
 
         empresa = issue.get("project", {}).get("name", "").split(" / ")[0].strip()
         tarea_base = {"empresa": empresa, "asunto": asunto, "issue_id": issue.get("id")}
 
-        if not roles_involucrados:
-            sin_responsables.append({**tarea_base, "tracker": tracker, "vencimiento": fecha_vencimiento})
-            continue
-
         for persona_id, roles in roles_involucrados.items():
             grupo = (notificaciones.setdefault(persona_id, {})
                      .setdefault(tracker, {})
-                     .setdefault((periodo, fecha_vencimiento), []))
+                     .setdefault((periodo, fecha_ref_raw), []))
             grupo.append({**tarea_base, "rol": " / ".join(roles)})
 
-    print(f"Filtrado laboral: {descartadas_sin_fecha} pendientes sin vencimiento cargado, "
-          f"{len(sin_responsables)} a avisar hoy pero sin responsables asignados.")
-    return notificaciones, sin_responsables
+    print(f"Filtrado laboral: {descartadas_sin_fecha} pendientes sin fecha de referencia cargada, "
+          f"{sin_responsables} a avisar hoy pero sin responsables asignados (se ignoran).")
+    return notificaciones
 
 def armar_html_persona(nombre_real, datos_por_tipo, redmine_url, correo_real=None):
     """Cuerpo del correo: un bloque por tipo de petición y, dentro, un subgrupo por
@@ -281,7 +342,7 @@ def armar_html_persona(nombre_real, datos_por_tipo, redmine_url, correo_real=Non
             html += f"""
             <div style="margin-bottom: 20px;">
                 <h3 style="color: #555555; font-size: 14px; font-weight: bold; margin: 10px 0 8px 0;">
-                    Período: <strong>{periodo}</strong> | Vencimiento: <strong>{formatear_fecha(fecha_raw)}</strong>
+                    Período: <strong>{periodo}</strong> | {REGLAS_LABORAL[tipo]["etiqueta_fecha"]}: <strong>{formatear_fecha(fecha_raw)}</strong>
                 </h3>
             """
             tareas = sorted(datos_por_tipo[tipo][(periodo, fecha_raw)], key=lambda t: t["empresa"])
@@ -431,7 +492,6 @@ if __name__ == "__main__":
     error_texto = None
     total_peticiones = 0
     correos = []
-    sin_responsables = []
     correos_enviados = 0
     access_token = None
 
@@ -439,9 +499,10 @@ if __name__ == "__main__":
         with requests.Session() as session:
             mapa_usuarios = fetch_redmine_users(session, url, redmine_key)
             peticiones = fetch_redmine_issues(session, url, redmine_key)
+            vencimientos_931 = fetch_vencimientos_931(session, url, redmine_key, peticiones)
         total_peticiones = len(peticiones)
 
-        notificaciones, sin_responsables = process_redmine_laboral(peticiones, hoy)
+        notificaciones = process_redmine_laboral(peticiones, hoy, vencimientos_931)
         correos = preparar_correos(notificaciones, mapa_usuarios, url)
 
         if solo_vista_previa:
@@ -471,9 +532,6 @@ if __name__ == "__main__":
             f"Personas con vencimientos a notificar: {len(correos)}",
             f"Correos enviados con éxito: {correos_enviados}",
         ]
-        if sin_responsables:
-            detalle += ["", "Peticiones que tocaba avisar hoy pero no tienen Liquidador/Control/Soporte asignado:"]
-            detalle += [f"  #{t['issue_id']} {t['empresa']} — {t['asunto']} (vence {t['vencimiento']})" for t in sin_responsables]
         if error_texto:
             detalle += ["", f"Error: {error_texto}"]
 
