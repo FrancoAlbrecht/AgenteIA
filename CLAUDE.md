@@ -103,3 +103,5 @@ Tercer script, **independiente** de impuestos y auditoría (no importa nada de e
 6. Se borró el secret `SMTP_PASSWORD`, ya sin uso en el repo.
 
 Último trabajo (06/10/2026): auditoría pasa a dispararse 03:13 ART; se agregan el resumen R2 (impuestos en producción, auditoría en pausa) y la notificación de consultorías (en producción). Laboral queda en pausa.
+
+Último trabajo (07/10/2026): push de R2/consultorías/auditoría (el `gh` ya tiene scope `workflow`); disparo externo con cron-job.org para impuestos, R2, auditoría y consultorías; auditoría ya no duplica el día de envío; nuevo título de los avisos de consultorías; Pogonza al grupo CONSULTORIA SAIRES; laboral con las respuestas de Diego (814 y vacaciones programados, sin Domésticas, SICORE/SIRADIG/Asiento en pausa).
