@@ -2,16 +2,7 @@ name: Reporte de Vencimientos Tributarios
 
 on:
   schedule:
-    # GitHub retrasa los triggers "schedule" bajo carga (confirmado: en este repo viene
-    # arrancando 3 a 7 horas tarde todos los días, por eso el correo llegaba cerca del
-    # mediodía en vez de a la mañana). Se adelanta el horario y se corre en un minuto
-    # que no sea en punto (evita la congestión de las horas exactas) para compensar
-    # ese atraso y que, con la demora típica, el envío real siga cayendo a la mañana.
     - cron: '24 6 * * *'   # dispara a las 03:24 ART; con 3-7hs de demora tipica llega ~06:30-10:30 ART
-    # Disparos de respaldo: si el de arriba se demoró de más o falló (ej. bloqueo de
-    # seguridad de Gmail como el del 15/09), estos vuelven a intentar más tarde en la
-    # mañana. main_impuestos.py chequea si ya hubo un envío exitoso hoy y, si lo hay,
-    # no manda nada (evita duplicar los avisos).
     - cron: '11 10 * * *'  # respaldo 1: dispara ~07:11 ART
     - cron: '37 13 * * *'  # respaldo 2: dispara ~10:37 ART
   workflow_dispatch:        # permite disparo manual desde la pestaña Actions, para pruebas
@@ -22,30 +13,7 @@ permissions:
 
 jobs:
   enviar-reporte:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Checkout del repositorio
-        uses: actions/checkout@v4
-
-      - name: Configurar Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Instalar dependencias
-        run: pip install -r requirements.txt
-
-      - name: Ejecutar agente
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REDMINE_URL: ${{ secrets.REDMINE_URL }}
-          REDMINE_API_KEY: ${{ secrets.REDMINE_API_KEY }}
-          SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
-          SMTP_PORT: ${{ secrets.SMTP_PORT }}
-          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
-          GMAIL_OAUTH_CLIENT_ID: ${{ secrets.GMAIL_OAUTH_CLIENT_ID }}
-          GMAIL_OAUTH_CLIENT_SECRET: ${{ secrets.GMAIL_OAUTH_CLIENT_SECRET }}
-          GMAIL_OAUTH_REFRESH_TOKEN: ${{ secrets.GMAIL_OAUTH_REFRESH_TOKEN }}
-          SMTP_FROM_EMAIL: ${{ secrets.SMTP_FROM_EMAIL }}
-        run: python main_impuestos.py
+    uses: ./.github/workflows/ejecutar-agente.yml
+    with:
+      sector: impuestos
+    secrets: inherit

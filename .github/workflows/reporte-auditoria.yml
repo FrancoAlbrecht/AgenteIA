@@ -2,13 +2,6 @@ name: Reporte Mensual de Auditoría
 
 on:
   schedule:
-    # Corre todos los días; el script decide internamente si hoy corresponde
-    # enviar (el 21 de cada mes, sea hábil o no). Se dispara de madrugada y en
-    # un minuto que no sea en punto porque GitHub retrasa los "schedule" varias
-    # horas (ver reporte-vencimientos.yml): así el correo sale a la mañana.
-    # Ojo: no adelantarlo antes de las 03:00 UTC (00:00 ART), porque el script
-    # toma la fecha en UTC y antes de esa hora en UTC ya es el día siguiente
-    # (en ART todavía no): mandaría el reporte del 21 la noche del 20.
     - cron: '13 6 * * *'  # dispara a las 03:13 ART
   workflow_dispatch:        # permite disparo manual desde la pestaña Actions, para pruebas
 
@@ -18,30 +11,7 @@ permissions:
 
 jobs:
   enviar-reporte:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Checkout del repositorio
-        uses: actions/checkout@v4
-
-      - name: Configurar Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Instalar dependencias
-        run: pip install -r requirements.txt
-
-      - name: Ejecutar agente de auditoría
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REDMINE_URL: ${{ secrets.REDMINE_URL }}
-          REDMINE_API_KEY: ${{ secrets.REDMINE_API_KEY }}
-          SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
-          SMTP_PORT: ${{ secrets.SMTP_PORT }}
-          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
-          GMAIL_OAUTH_CLIENT_ID: ${{ secrets.GMAIL_OAUTH_CLIENT_ID }}
-          GMAIL_OAUTH_CLIENT_SECRET: ${{ secrets.GMAIL_OAUTH_CLIENT_SECRET }}
-          GMAIL_OAUTH_REFRESH_TOKEN: ${{ secrets.GMAIL_OAUTH_REFRESH_TOKEN }}
-          SMTP_FROM_EMAIL: ${{ secrets.SMTP_FROM_EMAIL }}
-        run: python main_auditoria.py
+    uses: ./.github/workflows/ejecutar-agente.yml
+    with:
+      sector: auditoria
+    secrets: inherit
