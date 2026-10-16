@@ -10,7 +10,7 @@ WORKFLOW = "resumen-r2.yml"
 
 REDIRIGIR_A_ADMIN = False
 
-SECTORES_ACTIVOS = {"impuestos"}
+SECTORES_ACTIVOS = {"impuestos", "auditoria"}
 
 VARIABLE_FORZAR_AUDITORIA = "FORZAR_ENVIO_R2_AUDITORIA"
 
@@ -21,7 +21,7 @@ R2_POR_SECTOR = {
 
 MOSTRAR_CARGA_POR_PERSONA = {
     "impuestos": False,  # Cintia no la quiere (pedido del 06/10/2026)
-    "auditoria": True,   # a confirmar con Matías
+    "auditoria": False,  # se saca a pedido del usuario (15/10/2026), aprobado por Matías
 }
 
 FUERA_DEL_EQUIPO_R2 = {
@@ -168,7 +168,7 @@ def armar_resumen_auditoria(issues, usuarios, hoy, redmine_url):
     if not por_peticion:
         return None, 0
 
-    orden_roles = list(auditoria.ROLES.values())
+    roles = list(auditoria.ROLES.values())
     html = ""
     if MOSTRAR_CARGA_POR_PERSONA["auditoria"]:
         html += tabla_carga_por_persona(solo_equipo(notificaciones, fuera), usuarios, auditoria.TRACKERS)
@@ -179,16 +179,19 @@ def armar_resumen_auditoria(issues, usuarios, hoy, redmine_url):
         del_tipo = sorted(((iid, p) for iid, p in por_peticion.items() if p["tipo"] == tipo),
                           key=lambda x: (x[1]["clave"], x[1]["empresa"]))
         for issue_id, p in del_tipo:
-            # En auditoría hay 5 roles posibles: en vez de 5 columnas casi vacías, una
-            # sola columna "Equipo" con cada persona y su(s) rol(es).
-            equipo = sorted(p["equipo"], key=lambda x: min(
-                (orden_roles.index(r) for r in orden_roles if r in x[0]), default=len(orden_roles)))
-            texto_equipo = "<br>".join(f'{nombre_legible(usuarios, persona_id)} <span style="color: #888888;">({rol})</span>'
-                                       for rol, persona_id in equipo)
+            # Una columna por rol, como en impuestos: la columna única "Equipo" con
+            # persona + rol quedaba muy cargada (pedido del usuario, 15/10/2026). Casi
+            # todas las peticiones tienen los 5 roles cargados, así que no quedan vacías.
+            por_rol = {rol: [] for rol in roles}
+            for roles_persona, persona_id in p["equipo"]:
+                for rol in roles:
+                    if rol in roles_persona:
+                        por_rol[rol].append(nombre_legible(usuarios, persona_id))
             filas.append([link_peticion(redmine_url, issue_id),
                           f'<strong>{p["empresa"]}</strong><br><span style="color: #777777;">{p["asunto"]}</span>',
-                          fechas.formatear_corta(p["clave"]), texto_equipo])
-        html += tabla(["#", "Empresa / asunto", "Cierre OT", "Equipo"], filas)
+                          fechas.formatear_corta(p["clave"]),
+                          *[", ".join(por_rol[rol]) or '<span style="color: #aaaaaa;">—</span>' for rol in roles]])
+        html += tabla(["#", "Empresa / asunto", "Cierre OT", *roles], filas)
 
     return html, len(por_peticion)
 
