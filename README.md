@@ -154,6 +154,7 @@ en Redmine, el agente deja de encontrar peticiones **sin dar error**: mirar los 
 | `invalid_grant` al pedir el token | Refresh token vencido o revocado | Generar uno nuevo; actualizar secret y `.env`. |
 | Error de login SMTP (`535`, `WebLoginRequired`) | `SMTP_USERNAME` no es la cuenta del token, o bloqueo de Google | Verificar; revisar alertas de seguridad de esa cuenta. |
 | `401`/`403` de Redmine | API key inválida o sin permisos | Regenerar la key o revisar permisos. |
+| `502`/`503`/`504` de Redmine o "no respondió" | Redmine caído o saturado | Se reintenta solo ~4 min (`ESPERAS_REINTENTO` en `redmine.py`); si sigue, la corrida falla y la retoma el próximo disparo de respaldo. |
 | "0 personas a notificar" un día que debería haber | Campo/tracker renombrado, fecha sin cargar o feriado mal cargado | Contadores "sin fecha válida / fuera de la ventana" del log; `feriados.py`. |
 | Una persona no recibe su correo | Excluida/redirigida, sin mail en Redmine o rebota | `destinatarios.py` y el log `[ERROR] Error al enviar correo a ...`. |
 | Llegó el correo dos veces | Falló el anti-duplicados (`[WARN] No se pudo chequear corridas previas`) | Revisar `permissions: actions: read`. |

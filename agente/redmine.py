@@ -1,7 +1,15 @@
+import time
+
 import requests
 from agente import texto
 
 TAMANIO_PAGINA = 100
+
+# 19/10/2026: Redmine respondió 502 Bad Gateway un rato a la mañana y cortó el resumen R2 y una
+# corrida de consultorías. Ante errores transitorios (servidor caído o saturado, sin conexión,
+# timeout) se reintenta con estas esperas (en segundos, ~4 min en total) antes de dar error.
+ESPERAS_REINTENTO = (15, 30, 60, 120)
+ESTADOS_TRANSITORIOS = {429, 500, 502, 503, 504}
 
 class Redmine:
     def __init__(self, url, api_key, timeout=20):
@@ -23,10 +31,20 @@ class Redmine:
         return False
 
     def get(self, ruta, params=None):
-        respuesta = self._sesion.get(f"{self.url}{ruta}", headers=self._headers,
-                                     params=params or {}, timeout=self.timeout)
-        respuesta.raise_for_status()
-        return respuesta.json()
+        for intento, espera in enumerate((*ESPERAS_REINTENTO, None), start=1):
+            try:
+                respuesta = self._sesion.get(f"{self.url}{ruta}", headers=self._headers,
+                                             params=params or {}, timeout=self.timeout)
+                if espera is None or respuesta.status_code not in ESTADOS_TRANSITORIOS:
+                    respuesta.raise_for_status()
+                    return respuesta.json()
+                motivo = f"respondió {respuesta.status_code}"
+            except (requests.ConnectionError, requests.Timeout) as e:
+                if espera is None:
+                    raise
+                motivo = f"no respondió ({type(e).__name__})"
+            print(f"[WARN] Redmine {motivo} en {ruta}; reintento {intento}/{len(ESPERAS_REINTENTO)} en {espera} s.")
+            time.sleep(espera)
 
     def paginar(self, ruta, clave, params=None):
         """Recorre un listado paginado (ej. issues.json -> "issues") hasta la última página."""

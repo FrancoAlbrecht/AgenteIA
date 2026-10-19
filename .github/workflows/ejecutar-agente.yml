@@ -11,7 +11,7 @@ on:
 jobs:
   ejecutar:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15  # holgura para los reintentos ante caídas de Redmine (agente/redmine.py)
     steps:
       - name: Checkout del repositorio
         uses: actions/checkout@v4
