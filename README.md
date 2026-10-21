@@ -128,7 +128,7 @@ $env:SOLO_VISTA_PREVIA="1"; $env:FECHA_SIMULADA="2026-11-06"; python -m agente l
 | Día de envío de auditoría / envío puntual | `agente/sectores/auditoria.py` → `DIA_CORTE_MENSUAL`, `FECHAS_ENVIO_EXTRA` |
 | Nuevo cliente de consultoría | `agente/sectores/consultorias.py` → `PROYECTOS_CONSULTORIA` (identificador de la URL) |
 | R2, su equipo o activar auditoría | `agente/sectores/resumen_r2.py` → `R2_POR_SECTOR`, `FUERA_DEL_EQUIPO_R2`, `SECTORES_ACTIVOS` |
-| Feriados del año | `agente/feriados.py` (2027 incompleto) |
+| Feriados del año | `agente/feriados.py` (2027 sin los días turísticos: el decreto no salió aún) |
 | Estética de todos los correos | `agente/plantilla.py` |
 | Un agente nuevo | Módulo en `agente/sectores/` con `main()` usando `Corrida`; agregarlo a `SECTORES` en `agente/__main__.py`; workflow que llame a `ejecutar-agente.yml` |
 

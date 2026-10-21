@@ -19,9 +19,16 @@ FERIADOS: frozenset = frozenset({
     date(2026,  10,  12),
     date(2026,  11,  20),
     date(2026, 12,  8), date(2026, 12, 24), date(2026, 12, 25), date(2026, 12, 31),
-    # 2027
-    date(2027,  1,  1), date(2027,  2, 16), date(2027,  2, 17),
-    date(2027,  3, 24), date(2027,  4,  2), date(2027,  5,  1),
-    date(2027,  5, 25), date(2027,  6, 20), date(2027,  7,  9),
+    # 2027 (Ley 27.399; trasladables ya movidos al lunes). Faltan los días no laborables con
+    # fines turísticos: el decreto todavía no salió (21/10/2026), sumarlos cuando se publique.
+    date(2027,  1,  1), date(2027,  2,  8), date(2027,  2,  9),
+    date(2027,  3, 24), date(2027,  3, 26),
+    date(2027,  4,  2),
+    date(2027,  5,  1), date(2027,  5, 25),
+    date(2027,  6, 20), date(2027,  6, 21),
+    date(2027,  7,  9),
+    date(2027,  8, 16),
+    date(2027, 10, 11),
+    date(2027, 11, 20),
     date(2027, 12,  8), date(2027, 12, 25), date(2027, 12, 31),
 })
