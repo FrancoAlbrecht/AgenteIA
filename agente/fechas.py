@@ -62,6 +62,16 @@ def sumar_dias_habiles(fecha, dias_habiles):
     return _mover_dias_habiles(fecha, dias_habiles, 1)
 
 
+def habil_desde(fecha):
+    """La misma fecha si es hábil; si no, el día hábil siguiente."""
+    return fecha if es_dia_habil(fecha) else sumar_dias_habiles(fecha, 1)
+
+
+def dia_habil_del_mes(anio, mes, numero):
+    """El N-ésimo día hábil del mes (1 = el primero)."""
+    return sumar_dias_habiles(date(anio, mes, 1) - timedelta(days=1), numero)
+
+
 def fin_del_mes_siguiente(fecha):
     anio, mes = (fecha.year + 1, 1) if fecha.month == 12 else (fecha.year, fecha.month + 1)
     return date(anio, mes, calendar.monthrange(anio, mes)[1])

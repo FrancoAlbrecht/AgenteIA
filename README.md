@@ -12,7 +12,7 @@ Corren solos en **GitHub Actions**. Pese al nombre, **no usan IA**: son reglas f
 | `auditoria` | Peticiones `CyA Balance/Corte/Auditoria` *Pendientes* con `Fecha de cierre OT` entre hoy y fin del mes siguiente. | Diario, `reporte-auditoria.yml`; **sólo envía el día 21** (o `FECHAS_ENVIO_EXTRA`) | Producción |
 | `consultorias` | Consultas nuevas o editadas por clientes de `PROYECTOS_CONSULTORIA`: al asignado, al grupo asignado o, sin asignar, a los grupos del proyecto. | Cada 30 min, lun–vie 07:17–19:47 ART, `notificacion-consultorias.yml` | Producción |
 | `resumen_r2` | Un resumen por sector para el R2 (subgerente): una fila por petición con todo el equipo, más las que no le llegaron a nadie. | Diario, `resumen-r2.yml` (03:31 ART + 2 respaldos) | Producción (sólo impuestos) |
-| `laboral` | F.931 (2 hábiles antes), Decreto 814 (1 hábil después del vencimiento del 931) y Provisión de vacaciones (3 hábiles antes). | **Sin workflow**: sólo a mano | **Modo prueba** |
+| `laboral` | F.931 (2 hábiles antes), Decreto 814 (1 hábil después del vencimiento del 931, propio o según prioridad), Provisión de vacaciones (3 hábiles antes), Asiento de sueldos (2 hábiles antes de la presentación), SICORE (4° hábil del mes) y SIRADIG (día 20). | Diario, `reporte-laboral.yml` (03:19 ART + 2 respaldos) | **Modo prueba** |
 
 ## Estructura del proyecto
 
@@ -177,7 +177,7 @@ Para reproducir un problema en local: `SOLO_VISTA_PREVIA=1` (y `FECHA_SIMULADA` 
 
 - Impuestos y auditoría, si la descarga de Redmine falla a mitad, siguen con datos parciales
   (`peticiones_abiertas(estricto=False)`); laboral, R2 y consultorías cortan con error.
-- `laboral` no tiene workflow ni anti-duplicados; sigue en modo prueba.
+- `laboral` sigue en modo prueba (todo a admin) hasta el OK del sector.
 - Resumen R2 de auditoría en pausa (`SECTORES_ACTIVOS`).
 - Correos, IDs y nombres de personas están en el código de un repo público.
 - `REDIRIGIDOS_A_ADMIN` no aplica en auditoría: Previotto, Gisela recibe ese reporte en su casilla.
