@@ -45,17 +45,13 @@ REGLAS_LABORAL = {
 DIAS_HACIA_ATRAS_931 = 120
 
 # Prioridad de Redmine sin cargar.
-SIN_PRIORIDAD = "-"
+SIN_PRIORIDAD = {"", "-"}
 
 # Para reconocer el tracker sin depender de tildes/mayúsculas ("Provisión" vs "Provision").
 TRACKER_POR_NOMBRE_NORMALIZADO = {texto.normalizar(t): t for t in REGLAS_LABORAL}
 
 def tracker_laboral(issue):
     return TRACKER_POR_NOMBRE_NORMALIZADO.get(texto.normalizar(redmine.tracker_de(issue)))
-
-
-def prioridad_de(issue):
-    return issue.get("priority", {}).get("name", SIN_PRIORIDAD)
 
 
 def mes_siguiente_al_periodo(periodo):
@@ -74,7 +70,7 @@ def fecha_de_referencia(issue, regla, campos, periodo, vencimientos_del_931):
     if regla.get("segun_931"):
         por_proyecto, por_prioridad = vencimientos_del_931
         return fechas.parsear(por_proyecto.get((issue["project"]["id"], periodo))
-                              or por_prioridad.get((periodo, prioridad_de(issue))))
+                              or por_prioridad.get((periodo, redmine.prioridad_de(issue))))
 
     por_empresa = {texto.normalizar(e): n for e, n in regla.get("dia_habil_del_mes_por_empresa", {}).items()}
     dia_habil = por_empresa.get(texto.normalizar(redmine.empresa_de(issue)), regla.get("dia_habil_del_mes"))
@@ -123,8 +119,8 @@ def vencimientos_931(cliente, issues, hoy):
             continue
         periodo = redmine.periodo_de(campos)
         por_proyecto[(issue["project"]["id"], periodo)] = vencimiento
-        if prioridad_de(issue) != SIN_PRIORIDAD:
-            cantidad_por_prioridad[(periodo, prioridad_de(issue))][vencimiento] += 1
+        if redmine.prioridad_de(issue) not in SIN_PRIORIDAD:
+            cantidad_por_prioridad[(periodo, redmine.prioridad_de(issue))][vencimiento] += 1
     # Los del mismo período y prioridad vencen el mismo día; si alguno difiere, gana la mayoría.
     por_prioridad = {clave: cantidades.most_common(1)[0][0] for clave, cantidades in cantidad_por_prioridad.items()}
     return por_proyecto, por_prioridad
@@ -168,7 +164,7 @@ def agrupar_por_persona(issues, hoy, vencimientos_del_931):
     return notificaciones
 
 
-def armar_html(nombre_real, correo_real, datos_por_tipo, redmine_url):
+def armar_html(nombre_real, datos_por_tipo, redmine_url):
     # Sin cartel de modo prueba (pedido del usuario, 21/10/2026): la prueba tiene que verse igual
     # que el correo real; a quién le llegaría figura en el asunto.
     secciones = []
@@ -212,7 +208,7 @@ def procesar(corrida, informe):
     url = corrida.credenciales.redmine_url
     correos = reporte.preparar_correos(
         notificaciones, usuarios,
-        armar_html=lambda nombre, correo_real, datos: armar_html(nombre, correo_real, datos, url),
+        armar_html=lambda nombre, _correo, datos: armar_html(nombre, datos, url),
         prefijo_asunto="Vencimientos Laborales", modo_prueba=REDIRIGIR_A_ADMIN)
     if not correos:
         print("No hay vencimientos laborales para avisar hoy.")

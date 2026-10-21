@@ -145,6 +145,10 @@ def estado_de(issue):
     return issue.get("status", {}).get("name", "")
 
 
+def prioridad_de(issue):
+    return issue.get("priority", {}).get("name", "")
+
+
 def proyecto_de(issue):
     return issue.get("project", {}).get("name", "")
 
