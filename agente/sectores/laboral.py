@@ -169,12 +169,8 @@ def agrupar_por_persona(issues, hoy, vencimientos_del_931):
 
 
 def armar_html(nombre_real, correo_real, datos_por_tipo, redmine_url):
-    aviso = ""
-    if REDIRIGIR_A_ADMIN:
-        aviso = ('<p style="font-size: 12px; margin: 0 0 20px 0; padding: 8px 12px; background-color: #fff4d6; '
-                 'border: 1px solid #e6c65c; border-radius: 3px; color: #7a5b00;">'
-                 f"MODO PRUEBA — en producción este correo le llegaría a {nombre_real} "
-                 f"({correo_real or 'sin correo en Redmine'}).</p>")
+    # Sin cartel de modo prueba (pedido del usuario, 21/10/2026): la prueba tiene que verse igual
+    # que el correo real; a quién le llegaría figura en el asunto.
     secciones = []
     for tipo in sorted(datos_por_tipo, key=reporte.orden_segun(list(REGLAS_LABORAL))):
         regla = REGLAS_LABORAL[tipo]
@@ -186,7 +182,7 @@ def armar_html(nombre_real, correo_real, datos_por_tipo, redmine_url):
         secciones.append((regla["titulo"], grupos))
     intro = ("Te dejamos el listado de vencimientos laborales próximos que requieren tu atención, "
              "agrupados por tipo de petición.")
-    return reporte.armar_cuerpo(nombre_real, intro, secciones, redmine_url, aviso_html=aviso)
+    return reporte.armar_cuerpo(nombre_real, intro, secciones, redmine_url)
 
 
 @dataclass
