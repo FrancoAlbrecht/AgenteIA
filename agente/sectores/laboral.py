@@ -7,7 +7,7 @@ from agente.destinatarios import IDS_EXCLUIDOS, USUARIOS_FALLBACK
 
 WORKFLOW = "reporte-laboral.yml"
 
-REDIRIGIR_A_ADMIN = True
+REDIRIGIR_A_ADMIN = False
 
 ESTADO_A_AVISAR = "Pendiente"
 
