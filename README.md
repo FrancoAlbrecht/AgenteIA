@@ -63,7 +63,7 @@ images/LogoBlanco.png      Logo del encabezado de los correos.
 - **Excluidos y excepciones** (`agente/destinatarios.py`): `IDS_EXCLUIDOS` (nadie les avisa, ej.
   bajas) y `REDIRIGIDOS_A_ADMIN` (su correo va a admin). Se cargan **una sola vez** para todos.
   Auditoría suma sus propios excluidos y no aplica `REDIRIGIDOS_A_ADMIN` (tampoco consultorías).
-- **Anti-duplicados**: `github_actions.ya_hubo_envio_exitoso_hoy()` (impuestos, auditoría, R2).
+- **Anti-duplicados**: `github_actions.ya_hubo_envio_exitoso_hoy()` (impuestos, auditoría, R2, laboral).
 - **Ventana de consultorías**: desde la última corrida exitosa hasta ésta (tope 7 días): no se
   pierden ni repiten avisos aunque GitHub saltee corridas. El workflow no permite dos a la vez.
 

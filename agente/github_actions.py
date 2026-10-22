@@ -24,9 +24,11 @@ def ya_hubo_envio_exitoso_hoy(workflow):
     repo, token, run_id = contexto
     try:
         hoy = datetime.now().date().isoformat()
-        corridas = _get(repo, token, f"workflows/{workflow}/runs",
-                        {"status": "success", "created": f">={hoy}", "per_page": 10}).get("workflow_runs", [])
-        return any(str(r.get("id")) != str(run_id) for r in corridas)
+        # Sin filtros "status"/"created" en la API: a veces devuelven vacío y el respaldo
+        # reenvía todo (pasó el 20/10/2026 en impuestos). Se filtra acá.
+        corridas = _get(repo, token, f"workflows/{workflow}/runs", {"per_page": 30}).get("workflow_runs", [])
+        return any(str(r.get("id")) != str(run_id) and r.get("conclusion") == "success"
+                   and (r.get("created_at") or "").startswith(hoy) for r in corridas)
     except Exception as e:
         print(f"[WARN] No se pudo chequear corridas previas de hoy ({e}); se continúa igual.")
         return False
