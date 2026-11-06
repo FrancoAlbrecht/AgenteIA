@@ -4,19 +4,21 @@ from agente import destinatarios, entorno, fechas, plantilla, redmine, texto
 from agente.correo import Correo
 from agente.corrida import Corrida
 from agente.plantilla import COLOR, link_peticion
-from agente.sectores import auditoria, impuestos
+from agente.sectores import auditoria, impuestos, laboral
 
 WORKFLOW = "resumen-r2.yml"
 
 REDIRIGIR_A_ADMIN = False
 
-SECTORES_ACTIVOS = {"impuestos", "auditoria"}
+SECTORES_ACTIVOS = {"impuestos", "auditoria", "laboral"}
 
 VARIABLE_FORZAR_AUDITORIA = "FORZAR_ENVIO_R2_AUDITORIA"
 
+# Con más de un R2, les llega un solo correo a todos juntos.
 R2_POR_SECTOR = {
-    "impuestos": "542",  # Margaria, Cintia
-    "auditoria": "717",  # Depetris, Matías
+    "impuestos": ("542",),  # Margaria, Cintia
+    "auditoria": ("717",),  # Depetris, Matías
+    "laboral": ("639", "581"),  # Tosello, Lourdes; Coniglio, Diego (pedido del usuario, 06/11/2026)
 }
 
 MOSTRAR_CARGA_POR_PERSONA = {
@@ -35,6 +37,7 @@ FUERA_DEL_EQUIPO_R2 = {
         "254",  # Trinca, Luisina
         "242",  # Borgogno, Luis
     },
+    "laboral": set(),  # todo el equipo (pedido del usuario, 06/11/2026)
 }
 
 # Columnas cortas para la tabla "carga por persona".
@@ -196,10 +199,65 @@ def armar_resumen_auditoria(issues, usuarios, hoy, redmine_url):
     return html, len(por_peticion)
 
 
+def armar_resumen_laboral(issues, usuarios, hoy, redmine_url, vencimientos_del_931):
+    peticiones = laboral.peticiones_del_dia(issues, hoy, vencimientos_del_931)
+    por_peticion = invertir_por_peticion(laboral.agrupar_por_persona(peticiones), FUERA_DEL_EQUIPO_R2["laboral"])
+    sin_responsables = [p for p in peticiones if not p.roles_por_persona]
+    if not por_peticion and not sin_responsables:
+        return None, 0
+
+    orden_tipos = list(laboral.REGLAS_LABORAL)
+    roles = list(dict.fromkeys(laboral.ROLES.values()))
+    html = ""
+    for tipo in sorted({p["tipo"] for p in por_peticion.values()}, key=orden_tipos.index):
+        regla = laboral.REGLAS_LABORAL[tipo]
+        html += titulo_tipo(regla["titulo"], margen_inferior=4)
+        claves = sorted({p["clave"] for p in por_peticion.values() if p["tipo"] == tipo}, key=lambda c: (c[1], c[0]))
+        for periodo, fecha in claves:
+            html += (f'<p style="margin: 12px 0 6px 0; font-size: 13px; color: #555555;">Período: <strong>{periodo}</strong> | '
+                     f'{regla["etiqueta_fecha"]}: <strong>{fechas.formatear_larga(fecha)}</strong></p>')
+            filas = []
+            del_grupo = sorted(((iid, p) for iid, p in por_peticion.items()
+                                if p["tipo"] == tipo and p["clave"] == (periodo, fecha)),
+                               key=lambda x: x[1]["empresa"])
+            for issue_id, p in del_grupo:
+                por_rol = {rol: [] for rol in roles}
+                for roles_persona, persona_id in p["equipo"]:
+                    for rol in roles:
+                        if rol in roles_persona:
+                            por_rol[rol].append(nombre_legible(usuarios, persona_id))
+                filas.append([link_peticion(redmine_url, issue_id), f'<strong>{p["empresa"]}</strong>',
+                              *[", ".join(por_rol[rol]) or '<span style="color: #aaaaaa;">—</span>' for rol in roles]])
+            html += tabla(["#", "Empresa", *roles], filas)
+
+    if sin_responsables:
+        html += seccion_alerta("Peticiones que hoy no le llegaron a nadie (sin Liquidador, Control ni Soporte asignado)")
+        filas = [[link_peticion(redmine_url, p.issue.get("id")), f'<strong>{redmine.empresa_de(p.issue)}</strong>',
+                  laboral.REGLAS_LABORAL[p.tipo]["titulo"], fechas.formatear_larga(p.fecha.isoformat())]
+                 for p in sorted(sin_responsables, key=lambda p: redmine.proyecto_de(p.issue))]
+        html += tabla(["#", "Empresa", "Tipo", "Fecha"], filas)
+
+    return html, len(por_peticion) + len(sin_responsables)
+
+
 def es_dia_de_resumen_auditoria(hoy):
     return entorno.bandera_activa(VARIABLE_FORZAR_AUDITORIA) or auditoria.es_dia_de_envio(hoy)
 
-def preparar_resumenes(issues, usuarios, hoy, redmine_url, sectores):
+def destino_de_r2(r2_ids, usuarios):
+    """Casillas de los R2 de un sector, separadas por coma, y la etiqueta para el log."""
+    destinos, etiquetas = [], []
+    for r2_id in r2_ids:
+        correo_r2 = usuarios.get(r2_id, {}).get("correo", "")
+        destino, etiqueta = destinatarios.resolver_destino(nombre_legible(usuarios, r2_id), correo_r2,
+                                                           REDIRIGIR_A_ADMIN, frozenset())
+        if not destino:
+            destino, etiqueta = destinatarios.CORREO_ADMIN, "[SIN CORREO -> ADMIN]"
+        destinos.append(destino)
+        etiquetas.append(etiqueta)
+    return ", ".join(dict.fromkeys(destinos)), " ".join(dict.fromkeys(etiquetas))
+
+
+def preparar_resumenes(issues, usuarios, hoy, redmine_url, sectores, vencimientos_del_931=None):
     fecha_txt = fechas.formatear_larga(hoy.isoformat())
     definiciones = []
     if "impuestos" in sectores:
@@ -213,21 +271,22 @@ def preparar_resumenes(issues, usuarios, hoy, redmine_url, sectores):
                                  f"Este es el resumen del reporte mensual de auditoría que hoy ({fecha_txt}) le llegó al equipo."))
         else:
             print(f"[INFO] Hoy ({hoy}) no es día de envío del reporte de auditoría: no se arma su resumen R2.")
+    if "laboral" in sectores:
+        cuerpo, cantidad = armar_resumen_laboral(issues, usuarios, hoy, redmine_url, vencimientos_del_931)
+        definiciones.append(("laboral", "Laboral", cuerpo, cantidad,
+                             f"Este es el resumen de los vencimientos que hoy ({fecha_txt}) le llegaron al equipo de Laboral."))
 
     resumenes = []
     for sector, titulo, cuerpo, cantidad, intro in definiciones:
         if cuerpo is None:
             print(f"[INFO] {titulo}: no hay peticiones para resumir hoy.")
             continue
-        r2_id = R2_POR_SECTOR[sector]
-        nombre_r2 = nombre_legible(usuarios, r2_id)
-        correo_r2 = usuarios.get(r2_id, {}).get("correo", "")
-        destino, etiqueta = destinatarios.resolver_destino(nombre_r2, correo_r2, REDIRIGIR_A_ADMIN, frozenset())
-        if not destino:
-            destino, etiqueta = destinatarios.CORREO_ADMIN, "[SIN CORREO -> ADMIN]"
+        nombres_r2 = [nombre_legible(usuarios, r2_id) for r2_id in R2_POR_SECTOR[sector]]
+        nombre_r2 = " y ".join(nombres_r2)
+        destino, etiqueta = destino_de_r2(R2_POR_SECTOR[sector], usuarios)
         # Sin cartel de modo prueba (pedido del 06/10/2026): a quién le llegaría figura
         # en el resumen de ejecución.
-        saludo = plantilla.saludo(nombre_r2.split(" ")[0],
+        saludo = plantilla.saludo(" y ".join(n.split(" ")[0] for n in nombres_r2),
                                   f"{intro} Son <strong>{cantidad}</strong> peticiones; cada una aparece "
                                   f"una sola vez, con todas las personas que intervienen.")
         resumenes.append((sector, Correo(
@@ -260,8 +319,10 @@ def procesar(corrida, informe, sectores):
         usuarios = cliente.usuarios_o_respaldo(destinatarios.USUARIOS_FALLBACK)
         # Estricto: un resumen con datos parciales le mostraría al R2 menos trabajo del real.
         issues = cliente.peticiones_abiertas(estricto=True)
+        vencimientos_del_931 = laboral.vencimientos_931(cliente, issues, informe.hoy) if "laboral" in sectores else None
     informe.peticiones = len(issues)
-    informe.resumenes = preparar_resumenes(issues, usuarios, informe.hoy, corrida.credenciales.redmine_url, sectores)
+    informe.resumenes = preparar_resumenes(issues, usuarios, informe.hoy, corrida.credenciales.redmine_url, sectores,
+                                           vencimientos_del_931)
     if not informe.resumenes:
         print("No hay resúmenes R2 para mandar hoy.")
     informe.enviados = corrida.enviar([c for _, c in informe.resumenes])

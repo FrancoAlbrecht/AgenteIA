@@ -126,9 +126,19 @@ def vencimientos_931(cliente, issues, hoy):
     return por_proyecto, por_prioridad
 
 
-def agrupar_por_persona(issues, hoy, vencimientos_del_931):
-    notificaciones = {}
-    sin_responsables = sin_fecha = 0
+@dataclass
+class PeticionDelDia:
+    issue: dict
+    tipo: str
+    periodo: str
+    fecha: date
+    roles_por_persona: dict  # {persona_id: ["Liquidador", ...]}; vacío si no tiene responsables
+
+
+def peticiones_del_dia(issues, hoy, vencimientos_del_931):
+    """Las peticiones cuyo aviso sale hoy, tengan o no responsables (el R2 muestra las que no)."""
+    resultado = []
+    sin_fecha = 0
 
     for issue in issues:
         tracker = tracker_laboral(issue)
@@ -151,16 +161,20 @@ def agrupar_por_persona(issues, hoy, vencimientos_del_931):
             continue
         if dia_del_aviso(fecha, regla["dias_habiles"]) != hoy:
             continue
-        if not roles_por_persona:
-            sin_responsables += 1
-            continue
+        resultado.append(PeticionDelDia(issue, tracker, periodo, fecha, roles_por_persona))
 
-        for persona_id, roles in roles_por_persona.items():
-            reporte.agregar_tarea(notificaciones, persona_id, tracker, (periodo, fecha.isoformat()),
-                                  reporte.tarea(issue, texto.unir_roles(roles)))
-
+    sin_responsables = sum(1 for p in resultado if not p.roles_por_persona)
     print(f"Filtrado laboral: {sin_fecha} pendientes sin fecha de referencia cargada, "
           f"{sin_responsables} a avisar hoy pero sin responsables asignados (se ignoran).")
+    return resultado
+
+
+def agrupar_por_persona(peticiones):
+    notificaciones = {}
+    for p in peticiones:
+        for persona_id, roles in p.roles_por_persona.items():
+            reporte.agregar_tarea(notificaciones, persona_id, p.tipo, (p.periodo, p.fecha.isoformat()),
+                                  reporte.tarea(p.issue, texto.unir_roles(roles)))
     return notificaciones
 
 
@@ -203,7 +217,7 @@ def procesar(corrida, informe):
         vencimientos_del_931 = vencimientos_931(cliente, issues, informe.hoy)
     informe.peticiones = len(issues)
 
-    notificaciones = agrupar_por_persona(issues, informe.hoy, vencimientos_del_931)
+    notificaciones = agrupar_por_persona(peticiones_del_dia(issues, informe.hoy, vencimientos_del_931))
     informe.personas = len(notificaciones)
     url = corrida.credenciales.redmine_url
     correos = reporte.preparar_correos(
