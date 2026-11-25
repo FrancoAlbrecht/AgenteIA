@@ -1,7 +1,7 @@
 import os
 from datetime import datetime
 import requests
-from agente.fechas import parsear_iso_utc
+from agente.fechas import ZONA_ART, parsear_iso_utc
 
 URL_API = "https://api.github.com"
 
@@ -23,12 +23,14 @@ def ya_hubo_envio_exitoso_hoy(workflow):
         return False
     repo, token, run_id = contexto
     try:
-        hoy = datetime.now().date().isoformat()
+        # Día argentino: created_at viene en UTC y se convierte (ver fechas.hoy).
+        hoy = datetime.now(ZONA_ART).date()
         # Sin filtros "status"/"created" en la API: a veces devuelven vacío y el respaldo
         # reenvía todo (pasó el 20/10/2026 en impuestos). Se filtra acá.
         corridas = _get(repo, token, f"workflows/{workflow}/runs", {"per_page": 30}).get("workflow_runs", [])
         return any(str(r.get("id")) != str(run_id) and r.get("conclusion") == "success"
-                   and (r.get("created_at") or "").startswith(hoy) for r in corridas)
+                   and r.get("created_at") and parsear_iso_utc(r["created_at"]).astimezone(ZONA_ART).date() == hoy
+                   for r in corridas)
     except Exception as e:
         print(f"[WARN] No se pudo chequear corridas previas de hoy ({e}); se continúa igual.")
         return False

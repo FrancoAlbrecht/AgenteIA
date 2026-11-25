@@ -138,10 +138,12 @@ en Redmine, el agente deja de encontrar peticiones **sin dar error**: mirar los 
 
 ## GitHub Actions
 
-- Los `schedule` llegan **3 a 7 horas tarde** en este repo: por eso se disparan de madrugada,
+- Los `schedule` llegan **3 a 7 horas tarde** en este repo (en nov/2026, hasta 15 h): por eso se disparan de madrugada,
   en minutos "no redondos", y con respaldos. Auditoría además recibe un disparo externo temprano
   (cron-job.org, vía `workflow_dispatch` sobre `reporte-auditoria.yml`: no renombrar ese archivo).
-- **Fechas en UTC** en el runner: no mover crons antes de las 03:00 UTC (00:00 ART).
+- **Fecha de proceso en hora argentina** (`fechas.hoy()`), aunque el runner esté en UTC; el
+  anti-duplicados también compara por día argentino. Así, un respaldo atrasado que corre de noche
+  (ej. 22 h ART = 01 h UTC del día siguiente) encuentra el envío de esa mañana y no manda nada.
 - Todos los workflows aceptan disparo manual (*Actions → Run workflow*) y necesitan
   `permissions: actions: read` (anti-duplicados y ventana de consultorías).
 - GitHub desactiva los `schedule` de un repo sin commits durante 60 días.

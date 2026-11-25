@@ -11,8 +11,10 @@ MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio",
 
 
 def hoy():
+    # Fecha argentina, no la del runner (UTC): el 23/11/2026 un respaldo de GitHub atrasado
+    # corrió a las 22:11 ART, tomó la fecha UTC (24/11) y mandó los avisos del día siguiente.
     simulada = os.getenv("FECHA_SIMULADA")
-    return datetime.strptime(simulada, "%Y-%m-%d").date() if simulada else datetime.now().date()
+    return datetime.strptime(simulada, "%Y-%m-%d").date() if simulada else datetime.now(ZONA_ART).date()
 
 
 def parsear(fecha_str):
