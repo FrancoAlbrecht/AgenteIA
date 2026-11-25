@@ -20,7 +20,8 @@ FERIADOS: frozenset = frozenset({
     # 09/11: feriado nacional por la visita del Papa (Decreto 1103/2026). El 10/11 sólo es feriado
     # en Córdoba y CABA: el estudio trabaja. 23/11: Soberanía Nacional, trasladado del viernes 20.
     date(2026,  11,  9), date(2026,  11,  23),
-    date(2026, 12,  8), date(2026, 12, 24), date(2026, 12, 25), date(2026, 12, 31),
+    # 07/12: día no laborable con fines turísticos; el estudio no trabaja (confirmado 25/11/2026).
+    date(2026, 12,  7), date(2026, 12,  8), date(2026, 12, 24), date(2026, 12, 25), date(2026, 12, 31),
     # 2027 (Ley 27.399; trasladables ya movidos al lunes). Faltan los días no laborables con
     # fines turísticos: el decreto todavía no salió (21/10/2026), sumarlos cuando se publique.
     date(2027,  1,  1), date(2027,  2,  8), date(2027,  2,  9),
